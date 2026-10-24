@@ -344,7 +344,7 @@ function render(){
   $('planRoute').disabled=unique.length<2;
   $('openRoute').disabled=optimizedRoute.length<2;
   const q=$('q').value.toLowerCase();
-  const shown=records.filter(r=>validPair(r.lat,r.lon)&&(!q||[r.pandalName,r.name].join(' ').toLowerCase().includes(q)));
+  const shown=records.filter(r=>validPair(r.lat,r.lon)&&(r.pandalName||r.isPublic)&&(!q||[r.pandalName,r.name].join(' ').toLowerCase().includes(q)));
   $('rows').innerHTML=shown.length?shown.map(r=>{
     const name=(r.pandalName||r.name||'Unnamed location');
     return `<tr><td>${esc(name)}</td><td>${r.lat.toFixed(6)}, ${r.lon.toFixed(6)}</td><td>${r.isPublic?'<span class="tag">Public community map</span>':(r.confirmed?'Confirmed · local':'Not yet confirmed')}</td></tr>`;
