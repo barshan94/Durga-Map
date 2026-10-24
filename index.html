@@ -80,11 +80,15 @@ textarea.community-input{min-height:76px;resize:vertical}
   </div>
   <div id="communityList" class="community-list"><div class="muted">Connecting to the shared map…</div></div>
   <h2 style="margin-top:18px">Suggest a pandal</h2>
-  <p class="muted">Tap the map to fill coordinates, or enter them below. Check the existing entries first to avoid duplicates.</p>
+  <p class="muted">Add the pandal name, then import a photo to read its GPS locally or tap the map to choose the location. Photos are never uploaded.</p>
+  <div class="row">
+    <button class="primary" id="communityPickPhoto" type="button">Import photo to detect location</button>
+    <input id="communityPhotoFile" type="file" accept="image/*,.heic,.heif" hidden>
+  </div>
   <form id="communityForm">
     <div class="form-grid">
       <input class="community-input" id="cName" name="name" required minlength="2" maxlength="160" placeholder="Pandal / Puja name">
-      <input class="community-input" id="cDistrict" name="district" required minlength="2" maxlength="100" placeholder="District (required)">
+      <input class="community-input" id="cDistrict" name="district" maxlength="100" placeholder="District (optional)">
       <input class="community-input" id="cUpazila" name="upazila" maxlength="100" placeholder="Upazila / area (optional)">
       <input class="community-input" id="cAddress" name="address" maxlength="240" placeholder="Address / landmark (optional)">
       <input class="community-input" id="cLat" name="latitude" type="number" min="-90" max="90" step="any" required placeholder="Latitude">
@@ -385,6 +389,44 @@ function renderCommunity(){
   }
 }
 $('communityRefresh').addEventListener('click',loadCommunity);
+window.__fillCommunityCoordinates = async function(files){
+  const file = files && files[0];
+  if(!file)return;
+  const status = $('communityStatus');
+  status.classList.remove('error');
+  status.textContent = 'Reading GPS from '+file.name+' on this device…';
+  try{
+    const rec = await analyze(file);
+    if(validPair(rec.lat,rec.lon)){
+      $('cLat').value = rec.lat.toFixed(6);
+      $('cLon').value = rec.lon.toFixed(6);
+      if(map)map.setView([rec.lat,rec.lon],16);
+      status.textContent = 'GPS found in '+file.name+'. Coordinates filled in. Confirm the pandal location before submitting. The photo was not uploaded.';
+    }else{
+      status.textContent = 'No GPS coordinates were found in this photo. Tap the map or enter coordinates manually. The photo was not uploaded.';
+      status.classList.add('error');
+    }
+  }catch(error){
+    status.textContent = 'Could not read this photo. Tap the map or enter coordinates manually. The photo was not uploaded.';
+    status.classList.add('error');
+  }
+};
+$('communityPickPhoto').addEventListener('click',async()=>{
+  if(typeof window.__pickOriginalPhotos === 'function'){
+    try{
+      const files = await window.__pickOriginalPhotos();
+      await window.__fillCommunityCoordinates(files);
+    }catch(error){
+      $('communityStatus').textContent = 'Photo selection cancelled or failed. You can tap the map or enter coordinates manually.';
+    }
+  }else{
+    $('communityPhotoFile').click();
+  }
+});
+$('communityPhotoFile').addEventListener('change',async e=>{
+  if(e.target.files&&e.target.files.length)await window.__fillCommunityCoordinates(e.target.files);
+  e.target.value='';
+});
 $('communityList').addEventListener('click',e=>{
   const button=e.target.closest('[data-community-place]');
   if(!button||!map)return;
@@ -401,14 +443,14 @@ $('communityForm').addEventListener('submit',async e=>{
   const status=$('communityStatus'),submit=$('communitySubmit');
   const name=$('cName').value.trim(),district=$('cDistrict').value.trim();
   const latitude=Number($('cLat').value),longitude=Number($('cLon').value);
-  if(name.length<2||district.length<2||!validPair(latitude,longitude)){
-    status.textContent='Enter a pandal name, district, and valid non-zero GPS coordinates.';
+  if(name.length<2||!validPair(latitude,longitude)){
+    status.textContent='Enter a pandal name and valid non-zero GPS coordinates. Import a GPS photo or tap the map to set the location.';
     status.classList.add('error');return;
   }
   submit.disabled=true;status.classList.remove('error');
   status.textContent='Submitting your suggestion for review…';
   const payload={
-    name,district,
+    name,district:district||null,
     upazila:$('cUpazila').value.trim()||null,
     address:$('cAddress').value.trim()||null,
     description:$('cDescription').value.trim()||null,

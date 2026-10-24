@@ -29,19 +29,21 @@ jobs:
             var C=window.Capacitor;
             if(!C||!C.isNativePlatform||!C.isNativePlatform())return;
             var P=C.registerPlugin('PhotoPicker');
+            async function pickOriginalPhotos(){
+              var r=await P.pick();
+              return r.files.map(function(f){
+                var bin=atob(f.data),u=new Uint8Array(bin.length);
+                for(var i=0;i<bin.length;i++)u[i]=bin.charCodeAt(i);
+                return new File([u],f.name,{type:'image/jpeg'});
+              });
+            }
+            window.__pickOriginalPhotos=pickOriginalPhotos;
             var b=document.createElement('button');
             b.className='btn primary';
             b.textContent='Pick originals (app, keeps GPS)';
             b.onclick=async function(){
-              try{
-                var r=await P.pick();
-                var files=r.files.map(function(f){
-                  var bin=atob(f.data),u=new Uint8Array(bin.length);
-                  for(var i=0;i<bin.length;i++)u[i]=bin.charCodeAt(i);
-                  return new File([u],f.name,{type:'image/jpeg'});
-                });
-                window.__handle(files);
-              }catch(e){alert('Pick failed: '+(e.message||e))}
+              try{window.__handle(await pickOriginalPhotos())}
+              catch(e){alert('Pick failed: '+(e.message||e))}
             };
             var row=document.querySelector('.row');
             row.insertBefore(b,row.firstChild);
