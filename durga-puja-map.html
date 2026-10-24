@@ -32,7 +32,7 @@ th,td{text-align:left;padding:9px 11px;border-bottom:1px solid var(--line);font-
 <body>
 <div class="wrap">
 <p class="muted">Android-first · Photo GPS · Puja route planner</p><h1>Turn your photos into a <span>festival map.</span></h1>
-<p class="muted">Your photos stay on your device. GPS coordinates power your personal Puja map and visit route.</p>
+<p class="muted">Photos are read temporarily on your device. Only named location coordinates are saved and shared publicly.</p>
 
 <div class="grid">
 <section class="panel">
@@ -50,7 +50,7 @@ th,td{text-align:left;padding:9px 11px;border-bottom:1px solid var(--line);font-
 
 <section class="panel">
 <h2>2 · Review locations</h2>
-<p class="muted">Choose a photo, optionally name the pandal, and adjust its coordinates if needed.</p>
+<p class="muted">Select a record, name the pandal, and adjust coordinates if needed. Named locations are shared publicly when saved.</p>
 <select id="mPhoto" disabled><option>Import photos first</option></select>
 <label class="muted" for="mPandalName">Pandal name (optional)</label>
 <input id="mPandalName" type="text" maxlength="160" style="margin-top:4px" placeholder="e.g. Ramna Kali Mandir Puja">
@@ -80,9 +80,12 @@ th,td{text-align:left;padding:9px 11px;border-bottom:1px solid var(--line);font-
   <ol id="routeStops" style="padding-left:24px"></ol>
 </section>
 
-<div class="row" style="justify-content:space-between;align-items:center"><h2 style="margin:12px 0 0">Photo inventory</h2><input id="q" type="text" placeholder="Filter photos…" style="max-width:240px"></div>
-<div class="row"><button id="csv" disabled>Export CSV</button><button id="json" disabled>Export JSON</button><button id="clear" disabled>Clear imported photos</button></div>
-<div class="tw"><table><thead><tr><th>Photo</th><th>Pandal name</th><th>Capture time</th><th>GPS</th><th>Source / note</th><th>Size</th></tr></thead><tbody id="rows"><tr><td colspan="6" class="muted" style="text-align:center;padding:20px">Nothing yet.</td></tr></tbody></table></div>
+<div class="row" style="justify-content:space-between;align-items:center"><h2 style="margin:12px 0 0">Location inventory</h2><input id="q" type="text" placeholder="Filter locations…" style="max-width:240px"></div>
+<div class="row"><button id="csv" disabled>Export locations CSV</button><button id="json" disabled>Export locations JSON</button><button id="clear" disabled>Clear local locations</button></div>
+<p class="muted">Only named locations and GPS coordinates are retained. Photos are read temporarily and never uploaded.</p>
+<div class="tw"><table><thead><tr><th>Location name</th><th>GPS coordinates</th><th>Status</th></tr></thead><tbody id="rows"><tr><td colspan="3" class="muted" style="text-align:center;padding:20px">No locations yet.</td></tr></tbody></table></div>
+</div>
+
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
@@ -92,19 +95,48 @@ const SUPABASE_URL='https://iomikfkjawupfyppzamj.supabase.co';
 const SUPABASE_PUBLISHABLE_KEY='sb_publishable_oq6KLlCX0CBDxydBXWkKjA__6veVLGY';
 function loadSavedRecords(){
   try{
-    const saved=JSON.parse(localStorage.getItem('durgaMap.records.v1')||'[]');
+    localStorage.removeItem('durgaMap.records.v1');
+    const saved=JSON.parse(localStorage.getItem('durgaMap.locations.v2')||'[]');
     if(!Array.isArray(saved))return [];
-    return saved.map(r=>({...r,lat:Number.isFinite(r.lat)?r.lat:NaN,lon:Number.isFinite(r.lon)?r.lon:NaN,file:null}));
+    return saved.map((r,i)=>({name:String(r.name||r.pandalName||'Saved location '+(i+1)),pandalName:String(r.pandalName||r.name||''),lat:Number.isFinite(r.lat)?r.lat:NaN,lon:Number.isFinite(r.lon)?r.lon:NaN,confirmed:!!r.confirmed,file:null,remoteId:r.remoteId||null,isPublic:!!r.isPublic}));
   }catch{return []}
 }
-let records=loadSavedRecords(),sidecars=new Map(),map,layer,routeLayer,exifr=null,optimizedRoute=[];
+let records=loadSavedRecords(),sidecars=new Map(),map,layer,routeLayer,exifr=null,optimizedRoute=[],selectedRecordIndex=0;
 function persistRecords(){
   try{
-    localStorage.setItem('durgaMap.records.v1',JSON.stringify(records.map(r=>({
-      name:r.name,pandalName:r.pandalName||'',size:r.size||0,lat:validPair(r.lat,r.lon)?r.lat:null,
-      lon:validPair(r.lat,r.lon)?r.lon:null,time:r.time||'',src:r.src||'',note:r.note||'',confirmed:!!r.confirmed
-    }))));
-  }catch(e){console.warn('Could not persist Durga Map records',e)}
+    const locations=records.filter(r=>!r.isPublic&&validPair(r.lat,r.lon)&&(r.pandalName||'').trim()).map(r=>({name:r.pandalName.trim(),pandalName:r.pandalName.trim(),lat:r.lat,lon:r.lon,confirmed:!!r.confirmed}));
+    localStorage.setItem('durgaMap.locations.v2',JSON.stringify(locations));
+  }catch(e){console.warn('Could not persist location records',e)}
+}
+const SUPABASE_HEADERS={'apikey':SUPABASE_PUBLISHABLE_KEY,'Authorization':'Bearer '+SUPABASE_PUBLISHABLE_KEY,'Content-Type':'application/json'};
+async function loadPublicLocations(){
+  try{
+    const res=await fetch(SUPABASE_URL+'/rest/v1/puja_locations?select=id,name,latitude,longitude,description&order=name.asc',{headers:SUPABASE_HEADERS});
+    if(!res.ok)throw new Error('Public locations request failed ('+res.status+')');
+    const rows=await res.json();
+    const remote=rows.map(p=>({name:p.name,pandalName:p.name,lat:Number(p.latitude),lon:Number(p.longitude),confirmed:true,file:null,remoteId:p.id,isPublic:true,src:'Community map'}));
+    records=records.filter(r=>!r.isPublic).concat(remote);render();
+    setStatus('Loaded '+remote.length+' public Puja location(s). Photo files are not uploaded or saved.');
+  }catch(e){console.warn('Could not load public Puja locations',e);setStatus('Could not load shared locations. Check your internet connection.',true)}
+}
+async function publishLocation(r){
+  if(!r||!validPair(r.lat,r.lon)||!(r.pandalName||'').trim())return false;
+  const body={name:r.pandalName.trim(),latitude:r.lat,longitude:r.lon,description:''};
+  const endpoint=SUPABASE_URL+'/rest/v1/puja_locations?select=id,name,latitude,longitude,description';
+  try{
+    const check=await fetch(endpoint+'&name=eq.'+encodeURIComponent(body.name),{headers:SUPABASE_HEADERS});
+    if(check.ok){
+      const rows=await check.json();
+      const match=rows.find(p=>Math.abs(Number(p.latitude)-r.lat)<0.0003&&Math.abs(Number(p.longitude)-r.lon)<0.0003);
+      if(match){r.remoteId=match.id;r.isPublic=true;return true}
+    }
+    const res=await fetch(endpoint,{method:'POST',headers:{...SUPABASE_HEADERS,'Prefer':'return=representation'},body:JSON.stringify(body)});
+    const payload=await res.json().catch(()=>[]);
+    if(!res.ok)throw new Error(payload?.message||'Could not publish location ('+res.status+')');
+    const row=Array.isArray(payload)?payload[0]:null;
+    if(row){r.remoteId=row.id;r.isPublic=true}
+    return true;
+  }catch(e){console.warn('Could not publish location',e);$('mStatus').textContent='Not shared yet: '+(e.message||'network error');return false}
 }
 const setStatus=(m,e=false)=>{$('status').textContent=m;$('status').classList.toggle('error',e)};
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -292,6 +324,15 @@ function uniquePujaLocations(){
   }
   return unique;
 }
+function selectRecord(index){
+  if(!Number.isInteger(index)||index<0||index>=records.length)return;
+  selectedRecordIndex=index;
+  const r=records[index];
+  $('mPhoto').value=String(index);
+  $('mCoord').value=validPair(r.lat,r.lon)?r.lat.toFixed(6)+', '+r.lon.toFixed(6):'';
+  $('mPandalName').value=r.pandalName||'';
+  $('mStatus').textContent='Reviewing '+(r.pandalName||r.name)+(r.confirmed?' · confirmed':' · needs review')+'.';
+}
 function render(){
   const gps=records.filter(r=>validPair(r.lat,r.lon));
   const unique=uniquePujaLocations();
@@ -303,19 +344,11 @@ function render(){
   $('planRoute').disabled=unique.length<2;
   $('openRoute').disabled=optimizedRoute.length<2;
   const q=$('q').value.toLowerCase();
-  const shown=records.filter(r=>!q||[r.name,r.pandalName,r.time,r.src,r.note].join(' ').toLowerCase().includes(q));
+  const shown=records.filter(r=>validPair(r.lat,r.lon)&&(!q||[r.pandalName,r.name].join(' ').toLowerCase().includes(q)));
   $('rows').innerHTML=shown.length?shown.map(r=>{
-    const ok=validPair(r.lat,r.lon),idx=records.indexOf(r);
-    return `<tr><td>${esc(r.name)}</td><td><input type="text" maxlength="160" data-pandal-name="${idx}" value="${esc(r.pandalName||'')}" placeholder="Optional pandal name" style="min-width:180px"></td><td>${esc(r.time)||'—'}</td><td>${ok?r.lat.toFixed(6)+', '+r.lon.toFixed(6):'<span class="none">none</span>'}</td><td>${ok?'<span class="tag">'+esc(r.src)+'</span>':esc(r.note)}</td><td>${(r.size/1048576).toFixed(2)} MB</td></tr>`;
-  }).join(''):'<tr><td colspan="6" class="muted" style="text-align:center;padding:20px">Nothing yet.</td></tr>';
-  $('rows').querySelectorAll('[data-pandal-name]').forEach(input=>{
-    input.addEventListener('change',()=>{
-      const r=records[Number(input.dataset.pandalName)];
-      if(!r)return;
-      r.pandalName=input.value.trim();
-      render();
-    });
-  });
+    const name=(r.pandalName||r.name||'Unnamed location');
+    return `<tr><td>${esc(name)}</td><td>${r.lat.toFixed(6)}, ${r.lon.toFixed(6)}</td><td>${r.isPublic?'<span class="tag">Public community map</span>':(r.confirmed?'Confirmed · local':'Not yet confirmed')}</td></tr>`;
+  }).join(''):'<tr><td colspan="3" class="muted" style="text-align:center;padding:20px">No named locations yet. Name a GPS location in Review to save it.</td></tr>';
   if(layer){
     layer.clearLayers();
     unique.forEach(r=>{
@@ -325,17 +358,15 @@ function render(){
         .addTo(layer);
       marker.on('click',()=>{
         const i=records.indexOf(r);
-        $('mPhoto').value=String(i);
-        $('mCoord').value=r.lat.toFixed(6)+', '+r.lon.toFixed(6);
-        $('mPandalName').value=r.pandalName||'';
+        selectRecord(i);
         $('mStatus').textContent='Selected '+title+'.';
       });
     });
     if(gps.length)map.fitBounds(L.latLngBounds(gps.map(r=>[r.lat,r.lon])).pad(.2),{maxZoom:16});
   }
-  const sel=$('mPhoto'),previousSelection=sel.value;sel.disabled=!records.length;
-  sel.innerHTML=records.length?records.map((r,i)=>`<option value="${i}">${esc(r.pandalName||r.name)}${r.confirmed?' ✓':''}</option>`).join(''):'<option>Import photos first</option>';
-  if(records[Number(previousSelection)])sel.value=previousSelection;
+  const sel=$('mPhoto');sel.disabled=!records.length;
+  sel.innerHTML=records.length?records.map((r,i)=>`<option value="${i}">${esc(r.pandalName||r.name)}${r.isPublic?' · Public':(r.confirmed?' ✓':'')}</option>`).join(''):'<option>Import files first</option>';
+  if(records.length){selectedRecordIndex=Math.max(0,Math.min(selectedRecordIndex,records.length-1));sel.value=String(selectedRecordIndex);}
   $('mApply').disabled=$('mClear').disabled=$('mConfirm').disabled=!records.length;
   const gpsCount=records.filter(r=>validPair(r.lat,r.lon)).length;
   $('mConfirmAll').disabled=!gpsCount;
@@ -346,8 +377,7 @@ function render(){
     return '<div class="review-item"><div class="review-info"><strong>'+esc(label)+'</strong><div class="review-meta">'+(hasGps?esc(r.lat.toFixed(6)+', '+r.lon.toFixed(6)):'No GPS coordinates')+' · '+esc(state)+'</div></div><button type="button" data-review-index="'+i+'">Review</button></div>';
   }).join(''):'<p class="muted">No photos imported yet. Import photos to review each location.</p>';
   $('reviewList').querySelectorAll('[data-review-index]').forEach(button=>button.addEventListener('click',()=>{
-    $('mPhoto').value=button.dataset.reviewIndex;
-    $('mPhoto').dispatchEvent(new Event('change'));
+    selectRecord(Number(button.dataset.reviewIndex));
     $('mCoord').focus();
   }));
   persistRecords();
@@ -366,48 +396,46 @@ function parseManual(s){
   const n=s.match(/-?\d+(?:\.\d+)?/g);
   return n&&n.length>=2?[+n[0],+n[1]]:[NaN,NaN];
 }
-$('mApply').onclick=()=>{
+$('mApply').onclick=async()=>{
   const [a,b]=parseManual($('mCoord').value);
   if(!validPair(a,b)){$('mStatus').textContent='Could not read those coordinates.';return}
-  const r=records[+$('mPhoto').value];if(!r)return;r.lat=a;r.lon=b;r.src='Manual';r.note='';r.pandalName=$('mPandalName').value.trim();r.confirmed=true;
-  $('mStatus').textContent='Location and pandal name saved and confirmed for '+(r.pandalName||r.name);optimizedRoute=[];render();
+  const r=records[selectedRecordIndex];if(!r)return;
+  r.lat=a;r.lon=b;r.pandalName=$('mPandalName').value.trim();r.name=r.pandalName||r.name||'Saved location';r.confirmed=true;
+  optimizedRoute=[];render();persistRecords();
+  if(!r.pandalName){$('mStatus').textContent='Saved locally. Add a pandal name to publish publicly.';return}
+  if(await publishLocation(r)){await loadPublicLocations();$('mStatus').textContent='Published publicly: '+r.pandalName}
 };
-$('mConfirm').onclick=()=>{
-  const r=records[+$('mPhoto').value];
-  if(!r)return;
-  if(!validPair(r.lat,r.lon)){$('mStatus').textContent='This photo has no valid GPS coordinates to confirm.';return}
-  r.pandalName=$('mPandalName').value.trim();
-  r.confirmed=true;
-  $('mStatus').textContent='Confirmed '+(r.pandalName||r.name)+'.';
-  render();
+$('mConfirm').onclick=async()=>{
+  const r=records[selectedRecordIndex];if(!r)return;
+  if(!validPair(r.lat,r.lon)){$('mStatus').textContent='This record has no valid GPS coordinates to confirm.';return}
+  r.pandalName=$('mPandalName').value.trim();r.name=r.pandalName||r.name||'Saved location';r.confirmed=true;
+  render();persistRecords();
+  if(!r.pandalName){$('mStatus').textContent='Confirmed locally. Add a pandal name to publish publicly.';return}
+  if(await publishLocation(r)){await loadPublicLocations();$('mStatus').textContent='Published publicly: '+r.pandalName}
 };
 $('mConfirmAll').onclick=()=>{
-  const gps=records.filter(r=>validPair(r.lat,r.lon));
-  if(!gps.length)return;
+  const gps=records.filter(r=>validPair(r.lat,r.lon)&&r.pandalName&&!r.isPublic);
+  if(!gps.length){$('mStatus').textContent='Name each location before publishing. No named local locations are ready.';return}
   gps.forEach(r=>{r.confirmed=true});
-  $('mStatus').textContent='Confirmed all '+gps.length+' photo location(s) with valid GPS.';
-  render();
+  render();persistRecords();
+  $('mStatus').textContent='Confirmed '+gps.length+' named locations locally. Publish each from Review.';
 };
-$('mClear').onclick=()=>{const r=records[+$('mPhoto').value];if(!r)return;r.lat=r.lon=NaN;r.src='';r.confirmed=false;r.note='Location removed.';optimizedRoute=[];render()};
+$('mClear').onclick=()=>{const r=records[selectedRecordIndex];if(!r)return;r.lat=r.lon=NaN;r.confirmed=false;optimizedRoute=[];render();persistRecords();};
 
 function download(name,text,type){
   const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([text],{type}));a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);
 }
-const clean=()=>records.map(r=>({photo:r.name,pandal_name:r.pandalName||'',capture_time:r.time,latitude:validPair(r.lat,r.lon)?r.lat:'',longitude:validPair(r.lat,r.lon)?r.lon:'',source:r.src,size_bytes:r.size}));
-$('csv').onclick=()=>{const d=clean(),h=Object.keys(d[0]);download('photo-gps.csv',[h.join(','),...d.map(o=>h.map(k=>'"'+String(o[k]).replace(/"/g,'""')+'"').join(','))].join('\n'),'text/csv')};
-$('json').onclick=()=>download('photo-gps.json',JSON.stringify(clean(),null,2),'application/json');
-$('clear').onclick=()=>{records=[];sidecars.clear();optimizedRoute=[];routeLayer?.clearLayers();render();setStatus('Cleared imported photos and locations.')};
+const clean=()=>records.filter(r=>validPair(r.lat,r.lon)&&(r.pandalName||r.name)).map(r=>({pandal_name:r.pandalName||r.name,latitude:r.lat,longitude:r.lon,public:!!r.isPublic,confirmed:!!r.confirmed}));
+$('csv').onclick=()=>{const d=clean();if(!d.length)return;const h=Object.keys(d[0]);download('puja-locations.csv',[h.join(','),...d.map(o=>h.map(k=>'"'+String(o[k]).replace(/"/g,'""')+'"').join(','))].join('\n'),'text/csv')};
+$('json').onclick=()=>download('puja-locations.json',JSON.stringify(clean(),null,2),'application/json');
+$('clear').onclick=()=>{records=records.filter(r=>r.isPublic);sidecars.clear();optimizedRoute=[];selectedRecordIndex=0;routeLayer?.clearLayers();render();persistRecords();setStatus('Cleared local location data. Shared public locations remain available.')};
 $('q').oninput=render;
 for(const id of ['files','folder'])$(id).onchange=async e=>{await handle(e.target.files);optimizedRoute=[];e.target.value=''};
 $('mPhoto').addEventListener('change',()=>{
-  const r=records[+$('mPhoto').value];
-  if(!r)return;
-  $('mCoord').value=validPair(r.lat,r.lon)?r.lat.toFixed(6)+', '+r.lon.toFixed(6):'';
-  $('mPandalName').value=r.pandalName||'';
-  $('mStatus').textContent='Reviewing '+(r.pandalName||r.name)+(r.confirmed?' · already confirmed':' · not confirmed yet')+'.';
+  const index=Number($('mPhoto').value);
+  if(!Number.isInteger(index)||!records[index])return;
+  selectedRecordIndex=index;selectRecord(index);
 });
-
-
 
 function distanceKm(a,b){
   const rad=x=>x*Math.PI/180,R=6371;
@@ -473,7 +501,7 @@ $('openRoute').addEventListener('click',()=>{
   window.open(url,'_blank','noopener');
 });
 
-initMap();render();
+initMap();render();loadPublicLocations();
 </script>
 </body>
 </html>
