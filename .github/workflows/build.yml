@@ -22,7 +22,7 @@ jobs:
           npx cap add android
       - name: Patch web page
         run: |
-          sed -i 's#initMap();render();loadCommunity();#window.__handle=handle;initMap();render();loadCommunity();#' www/index.html
+          sed -i 's#initMap();render();#window.__handle=handle;initMap();render();#' www/index.html
           sed -i 's#</body>#<script src="extra.js"></script></body>#' www/index.html
           cat > www/extra.js <<'EOF'
           (function(){
