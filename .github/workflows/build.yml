@@ -18,13 +18,113 @@ jobs:
       - run: npm install
       - run: |
           mkdir -p www
-          cp "$(find . -name '*.html' -not -path './node_modules/*' -not -path './android/*' | head -n 1)" www/index.html
-          
+          cp durga-puja-map.html www/index.html
           npx cap add android
-      - name: Add permissions and startup request
+      - name: Patch web page
+        run: |
+          sed -i 's#initMap();render();#window.__handle=handle;initMap();render();#' www/index.html
+          sed -i 's#</body>#<script src="extra.js"></script></body>#' www/index.html
+          cat > www/extra.js <<'EOF'
+          (function(){
+            var C=window.Capacitor;
+            if(!C||!C.isNativePlatform||!C.isNativePlatform())return;
+            var P=C.registerPlugin('PhotoPicker');
+            var b=document.createElement('button');
+            b.className='btn primary';
+            b.textContent='Pick originals (app, keeps GPS)';
+            b.onclick=async function(){
+              try{
+                var r=await P.pick();
+                var files=r.files.map(function(f){
+                  var bin=atob(f.data),u=new Uint8Array(bin.length);
+                  for(var i=0;i<bin.length;i++)u[i]=bin.charCodeAt(i);
+                  return new File([u],f.name,{type:'image/jpeg'});
+                });
+                window.__handle(files);
+              }catch(e){alert('Pick failed: '+(e.message||e))}
+            };
+            var row=document.querySelector('.row');
+            row.insertBefore(b,row.firstChild);
+          })();
+          EOF
+      - name: Native code
         run: |
           sed -i 's#<application#<uses-permission android:name="android.permission.READ_MEDIA_IMAGES"/>\n    <uses-permission android:name="android.permission.ACCESS_MEDIA_LOCATION"/>\n    <application#' android/app/src/main/AndroidManifest.xml
-          cat > android/app/src/main/java/com/barshan/durgamap/MainActivity.java <<'EOF'
+          D=android/app/src/main/java/com/barshan/durgamap
+          cat > $D/PhotoPickerPlugin.java <<'EOF'
+          package com.barshan.durgamap;
+
+          import android.content.ClipData;
+          import android.content.Intent;
+          import android.database.Cursor;
+          import android.net.Uri;
+          import android.provider.MediaStore;
+          import android.provider.OpenableColumns;
+          import android.util.Base64;
+          import androidx.activity.result.ActivityResult;
+          import com.getcapacitor.JSArray;
+          import com.getcapacitor.JSObject;
+          import com.getcapacitor.Plugin;
+          import com.getcapacitor.PluginCall;
+          import com.getcapacitor.PluginMethod;
+          import com.getcapacitor.annotation.ActivityCallback;
+          import com.getcapacitor.annotation.CapacitorPlugin;
+          import java.io.ByteArrayOutputStream;
+          import java.io.InputStream;
+          import java.util.ArrayList;
+          import java.util.List;
+
+          @CapacitorPlugin(name = "PhotoPicker")
+          public class PhotoPickerPlugin extends Plugin {
+            @PluginMethod
+            public void pick(PluginCall call) {
+              Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+              i.addCategory(Intent.CATEGORY_OPENABLE);
+              i.setType("image/*");
+              i.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
+              startActivityForResult(call, i, "onPicked");
+            }
+
+            @ActivityCallback
+            private void onPicked(PluginCall call, ActivityResult result) {
+              if (call == null) return;
+              Intent data = result.getData();
+              if (data == null) { call.reject("Nothing selected"); return; }
+              List<Uri> uris = new ArrayList<>();
+              ClipData cd = data.getClipData();
+              if (cd != null) { for (int k = 0; k < cd.getItemCount(); k++) uris.add(cd.getItemAt(k).getUri()); }
+              else if (data.getData() != null) uris.add(data.getData());
+              JSArray out = new JSArray();
+              for (Uri u : uris) {
+                try {
+                  Uri src = u;
+                  try {
+                    Uri m = MediaStore.getMediaUri(getContext(), u);
+                    if (m != null) src = MediaStore.setRequireOriginal(m);
+                  } catch (Exception ignored) {}
+                  InputStream in;
+                  try { in = getContext().getContentResolver().openInputStream(src); }
+                  catch (Exception e) { in = getContext().getContentResolver().openInputStream(u); }
+                  ByteArrayOutputStream bo = new ByteArrayOutputStream();
+                  byte[] buf = new byte[65536]; int n;
+                  while ((n = in.read(buf)) > 0) bo.write(buf, 0, n);
+                  in.close();
+                  String name = "photo.jpg";
+                  Cursor c = getContext().getContentResolver().query(u, null, null, null, null);
+                  if (c != null) { if (c.moveToFirst()) { int ix = c.getColumnIndex(OpenableColumns.DISPLAY_NAME); if (ix >= 0) name = c.getString(ix); } c.close(); }
+                  JSObject o = new JSObject();
+                  o.put("name", name);
+                  o.put("data", Base64.encodeToString(bo.toByteArray(), Base64.NO_WRAP));
+                  out.put(o);
+                } catch (Exception e) { }
+              }
+              JSObject ret = new JSObject();
+              ret.put("files", out);
+              call.resolve(ret);
+            }
+          }
+          EOF
+          cat > $D/MainActivity.java <<'EOF'
           package com.barshan.durgamap;
 
           import android.os.Bundle;
@@ -34,6 +134,7 @@ jobs:
           public class MainActivity extends BridgeActivity {
             @Override
             public void onCreate(Bundle savedInstanceState) {
+              registerPlugin(PhotoPickerPlugin.class);
               super.onCreate(savedInstanceState);
               ActivityCompat.requestPermissions(this, new String[]{
                 "android.permission.READ_MEDIA_IMAGES",
