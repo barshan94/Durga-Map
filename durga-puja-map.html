@@ -102,6 +102,12 @@ function initMap(){
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; OpenStreetMap contributors'}).addTo(map);
   layer=L.layerGroup().addTo(map);
   routeLayer=L.layerGroup().addTo(map);
+  map.on('click',e=>{
+    const r=records[+$('mPhoto').value];
+    if(!r)return;
+    $('mCoord').value=e.latlng.lat.toFixed(6)+', '+e.latlng.lng.toFixed(6);
+    $('mStatus').textContent='Coordinates filled from map for '+(r.pandalName||r.name)+'. Tap “Save location and name” to apply.';
+  });
 }
 
 /* ---------- Built-in EXIF parser ----------
@@ -258,14 +264,26 @@ async function handle(list){
   setStatus(g?`Done. ${g} of ${records.length} photo(s) have GPS.`:'No GPS found in any selected file. See the note in the table.',!g);
 }
 
+function uniquePujaLocations(){
+  const gps=records.filter(r=>validPair(r.lat,r.lon));
+  const unique=[];
+  for(const r of gps){
+    const name=(r.pandalName||'').trim().toLowerCase();
+    const existing=unique.find(x=>distanceKm(x,r)<=0.03&&(!(name&&(x.pandalName||'').trim()&&name!==(x.pandalName||'').trim().toLowerCase())));
+    if(!existing)unique.push(r);
+    else if(!(existing.pandalName||'').trim()&&name)unique[unique.indexOf(existing)]=r;
+  }
+  return unique;
+}
 function render(){
   const gps=records.filter(r=>validPair(r.lat,r.lon));
-  const named=gps.filter(r=>(r.pandalName||'').trim());
+  const unique=uniquePujaLocations();
+  const named=unique.filter(r=>(r.pandalName||'').trim());
   $('nTotal').textContent=records.length;$('nGps').textContent=gps.length;$('nTime').textContent=records.filter(r=>r.time).length;
-  $('nPandal').textContent=named.length;$('nPuja').textContent=gps.length;
+  $('nPandal').textContent=named.length;$('nPuja').textContent=unique.length;
   $('nUnlocated').textContent=records.length-gps.length;$('nNamed').textContent=named.length;
   ['csv','json','clear'].forEach(i=>$(i).disabled=!records.length);
-  $('planRoute').disabled=gps.length<2;
+  $('planRoute').disabled=unique.length<2;
   $('openRoute').disabled=optimizedRoute.length<2;
   const q=$('q').value.toLowerCase();
   const shown=records.filter(r=>!q||[r.name,r.pandalName,r.time,r.src,r.note].join(' ').toLowerCase().includes(q));
@@ -283,7 +301,7 @@ function render(){
   });
   if(layer){
     layer.clearLayers();
-    gps.forEach(r=>{
+    unique.forEach(r=>{
       const title=(r.pandalName||'').trim()||r.name;
       const marker=L.circleMarker([r.lat,r.lon],{radius:8,color:'#172014',weight:2,fillColor:r.src==='Manual'?'#75c7ff':'#c4f36a',fillOpacity:.98})
         .bindPopup('<b>'+esc(title)+'</b>'+(title!==r.name?'<br><span>'+esc(r.name)+'</span>':'')+'<br><span>Captured: '+esc(r.time||'Unknown')+'</span><br><span>GPS: '+r.lat.toFixed(6)+', '+r.lon.toFixed(6)+'</span><br><span>Source: '+esc(r.src||'Unknown')+'</span>')
@@ -355,7 +373,7 @@ function routeLength(list){
   return sum;
 }
 function optimizeStops(){
-  const stops=records.filter(r=>validPair(r.lat,r.lon));
+  const stops=uniquePujaLocations();
   if(stops.length<2){$('routeSummary').textContent='Import at least two photos with GPS to plan a route.';return}
   // Try every start with nearest-neighbour, then improve each candidate with 2-opt.
   let best=null,bestLen=Infinity;
@@ -374,8 +392,8 @@ function optimizeStops(){
         const before=(i?distanceKm(candidate[i-1],candidate[i]):0)+distanceKm(candidate[k],candidate[k+1]||candidate[k]);
         const after=(i?distanceKm(candidate[i-1],candidate[k]):0)+distanceKm(candidate[i],candidate[k+1]||candidate[k]);
         if(k===candidate.length-1) {
-          const old=(i?distanceKm(candidate[i-1],candidate[i]):0)+distanceKm(candidate[k-1],candidate[k]);
-          const neu=(i?distanceKm(candidate[i-1],candidate[k]):0)+distanceKm(candidate[i],candidate[k-1]);
+          const old=i?distanceKm(candidate[i-1],candidate[i]):0;
+          const neu=i?distanceKm(candidate[i-1],candidate[k]):0;
           if(neu+0.0001<old){candidate.splice(i,k-i+1,...candidate.slice(i,k+1).reverse());changed=true}
         } else if(after+0.0001<before){candidate.splice(i,k-i+1,...candidate.slice(i,k+1).reverse());changed=true}
       }
