@@ -23,86 +23,64 @@ th,td{text-align:left;padding:9px 11px;border-bottom:1px solid var(--line);font-
 .tag{background:#293a2d;color:var(--lime);padding:2px 7px;border-radius:6px;font-size:11px}.none{color:var(--err)}
 .warn{background:#2c2a18;border:1px solid #6b6430;border-radius:12px;padding:12px;margin:12px 0;font-size:13px}
 
-.community-list{display:grid;gap:8px;margin-top:10px}
-.community-item{background:var(--p2);border:1px solid var(--line);border-radius:10px;padding:10px}
-.community-item b{display:block}.community-item small{color:var(--muted)}
-.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
-.form-grid .full{grid-column:1/-1}
-@media(max-width:520px){.form-grid{grid-template-columns:1fr}.form-grid .full{grid-column:auto}}
-.community-input{width:100%;background:var(--bg);color:var(--text);border:1px solid var(--line);border-radius:9px;padding:10px;font:inherit}
-textarea.community-input{min-height:76px;resize:vertical}
-#communityStatus{margin-top:9px;font-size:13px;white-space:pre-wrap;color:var(--muted)}
-#communityStatus.error{color:var(--err)}
+.route-number{background:transparent;border:0}
+.route-number span{display:flex;align-items:center;justify-content:center;width:30px;height:30px;border:2px solid #101713;border-radius:50%;background:#ffb454;color:#172014;font-weight:800;box-shadow:0 2px 7px #0008}
 
 </style>
 </head>
 <body>
 <div class="wrap">
-<p class="muted">Version 5</p><h1>Turn your photos into a <span>festival map.</span></h1>
-<p class="muted">Everything runs in your browser. Photos are never uploaded. Only map tiles are fetched from OpenStreetMap.</p>
-
-<div class="warn"><b>Important:</b> if you pick photos through your phone's <i>Photos / Gallery</i> picker, the browser usually receives them <b>with GPS removed</b> (Android and iOS both do this for privacy). Google Photos "location" may also exist only in Google's database, not in the file. Use <b>"Choose files (keeps GPS)"</b> below and select the original files from a folder (e.g. Downloads, DCIM/Camera), or downloaded originals from Google Photos.</div>
+<p class="muted">Android-first · Photo GPS · Puja route planner</p><h1>Turn your photos into a <span>festival map.</span></h1>
+<p class="muted">Your photos stay on your device. GPS coordinates power your personal Puja map and visit route.</p>
 
 <div class="grid">
 <section class="panel">
 <h2>1 · Import</h2>
-<div class="muted">Select photos (JPEG, HEIC, TIFF…) and optionally Google Takeout <code>.json</code> sidecars together.</div>
+<div class="muted">Choose original photo files to preserve GPS, or select a whole folder. Photos are processed on this device and never uploaded.</div>
 <div class="row">
-<label class="btn primary" for="files">Choose files (keeps GPS)</label>
+<label class="btn primary" for="files">Choose files (keep GPS)</label>
 <input id="files" type="file" multiple>
-<label class="btn" for="photos">Photo picker</label>
-<input id="photos" type="file" accept="image/*,.heic,.heif,.json" multiple>
 <label class="btn" for="folder">Select whole folder</label>
 <input id="folder" type="file" webkitdirectory multiple>
 </div>
-<div class="row"><button id="csv" disabled>Export CSV</button><button id="json" disabled>Export JSON</button><button id="clear" disabled>Clear</button></div>
-<div class="stats"><div class="stat"><b id="nTotal">0</b><span class="muted">Photos</span></div><div class="stat"><b id="nGps">0</b><span class="muted">With GPS</span></div><div class="stat"><b id="nTime">0</b><span class="muted">With time</span></div></div>
+<div class="stats"><div class="stat"><b id="nTotal">0</b><span class="muted">Photos scanned</span></div><div class="stat"><b id="nGps">0</b><span class="muted">Locations found</span></div><div class="stat"><b id="nPandal">0</b><span class="muted">Named pandals</span></div></div>
 <div id="status">Waiting for photos.</div>
 </section>
 
 <section class="panel">
-<h2>2 · Map</h2>
-<div id="map"></div>
-<h2 style="margin-top:14px;font-size:15px">Add location manually</h2>
+<h2>2 · Review locations</h2>
+<p class="muted">Choose a photo, optionally name the pandal, and adjust its coordinates if needed.</p>
 <select id="mPhoto" disabled><option>Import photos first</option></select>
-<input id="mCoord" type="text" style="margin-top:8px" placeholder="23.615944, 90.503167 or 23°36'57.4&quot;N 90°30'11.4&quot;E">
-<div class="row"><button id="mApply" class="primary" disabled>Apply</button><button id="mClear" disabled>Remove location</button></div>
+<label class="muted" for="mPandalName">Pandal name (optional)</label>
+<input id="mPandalName" type="text" maxlength="160" style="margin-top:4px" placeholder="e.g. Ramna Kali Mandir Puja">
+<label class="muted" for="mCoord" style="display:block;margin-top:10px">GPS coordinates</label>
+<input id="mCoord" type="text" style="margin-top:4px" placeholder="23.615944, 90.503167 or 23°36'57.4&quot;N 90°30'11.4&quot;E">
+<div class="row"><button id="mApply" class="primary" disabled>Save location and name</button><button id="mClear" disabled>Remove GPS</button></div>
 <div id="mStatus" class="muted" style="margin-top:6px"></div>
 </section>
 </div>
 
-<section class="panel" style="margin-top:14px" aria-labelledby="communityHeading">
-  <h2 id="communityHeading">3 · Community Durga Puja Map</h2>
-  <p class="muted">Browse published pandals shared by the community, or suggest a new one. Suggestions stay private until reviewed. Photos are not uploaded.</p>
-  <div class="row">
-    <button id="communityRefresh" type="button">Refresh shared map</button>
-    <span id="communityCount" class="muted">Loading published pandals…</span>
-  </div>
-  <div id="communityList" class="community-list"><div class="muted">Connecting to the shared map…</div></div>
-  <h2 style="margin-top:18px">Suggest a pandal</h2>
-  <p class="muted">Add the pandal name, then import a photo to read its GPS locally or tap the map to choose the location. Photos are never uploaded.</p>
-  <div class="row">
-    <button class="primary" id="communityPickPhoto" type="button">Import photo to detect location</button>
-    <input id="communityPhotoFile" type="file" accept="image/*,.heic,.heif" hidden>
-  </div>
-  <form id="communityForm">
-    <div class="form-grid">
-      <input class="community-input" id="cName" name="name" required minlength="2" maxlength="160" placeholder="Pandal / Puja name">
-      <input class="community-input" id="cDistrict" name="district" maxlength="100" placeholder="District (optional)">
-      <input class="community-input" id="cUpazila" name="upazila" maxlength="100" placeholder="Upazila / area (optional)">
-      <input class="community-input" id="cAddress" name="address" maxlength="240" placeholder="Address / landmark (optional)">
-      <input class="community-input" id="cLat" name="latitude" type="number" min="-90" max="90" step="any" required placeholder="Latitude">
-      <input class="community-input" id="cLon" name="longitude" type="number" min="-180" max="180" step="any" required placeholder="Longitude">
-      <textarea class="community-input full" id="cDescription" name="description" maxlength="500" placeholder="Short details (optional)"></textarea>
-    </div>
-    <div class="row"><button class="primary" id="communitySubmit" type="submit">Submit for review</button></div>
-  </form>
-  <div id="communityStatus" role="status" aria-live="polite">The shared map is loading.</div>
-  <p class="muted">Duplicate protection: submissions within 30 metres of a recorded pandal are blocked. Matching names within 2 km are also flagged. A false match can be reviewed manually.</p>
+<section class="panel" style="margin-top:14px" aria-labelledby="mapHeading">
+  <h2 id="mapHeading">3 · Your Puja map</h2>
+  <p class="muted">All locations detected from your photos appear here. Give a location a pandal name in Step 2 to make it easier to identify.</p>
+  <div class="stats"><div class="stat"><b id="nPuja">0</b><span class="muted">Puja locations</span></div><div class="stat"><b id="nUnlocated">0</b><span class="muted">Photos without GPS</span></div><div class="stat"><b id="nNamed">0</b><span class="muted">Named locations</span></div></div>
+  <div id="map" style="margin-top:12px"></div>
 </section>
 
-<div class="row" style="justify-content:space-between;align-items:center"><h2 style="margin:12px 0 0">4 · Inventory</h2><input id="q" type="text" placeholder="Filter…" style="max-width:240px"></div>
-<div class="tw"><table><thead><tr><th>Photo</th><th>Capture time</th><th>GPS</th><th>Source / note</th><th>Size</th></tr></thead><tbody id="rows"><tr><td colspan="5" class="muted" style="text-align:center;padding:20px">Nothing yet.</td></tr></tbody></table></div>
+<section class="panel" style="margin-top:14px" aria-labelledby="routeHeading">
+  <h2 id="routeHeading">4 · Shortest visiting route</h2>
+  <p class="muted">Builds an efficient stop order from your GPS locations. The order is optimized by geographic distance; your navigation app will calculate actual road directions and travel times.</p>
+  <div class="row">
+    <button id="planRoute" class="primary" type="button" disabled>Plan visiting route</button>
+    <button id="openRoute" type="button" disabled>Open route in Google Maps</button>
+  </div>
+  <div id="routeSummary" class="muted" style="margin-top:10px">Import photos with GPS to plan a route.</div>
+  <ol id="routeStops" style="padding-left:24px"></ol>
+</section>
+
+<div class="row" style="justify-content:space-between;align-items:center"><h2 style="margin:12px 0 0">Photo inventory</h2><input id="q" type="text" placeholder="Filter photos…" style="max-width:240px"></div>
+<div class="row"><button id="csv" disabled>Export CSV</button><button id="json" disabled>Export JSON</button><button id="clear" disabled>Clear imported photos</button></div>
+<div class="tw"><table><thead><tr><th>Photo</th><th>Pandal name</th><th>Capture time</th><th>GPS</th><th>Source / note</th><th>Size</th></tr></thead><tbody id="rows"><tr><td colspan="6" class="muted" style="text-align:center;padding:20px">Nothing yet.</td></tr></tbody></table></div>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
@@ -110,7 +88,7 @@ textarea.community-input{min-height:76px;resize:vertical}
 const $=id=>document.getElementById(id);
 const SUPABASE_URL='https://iomikfkjawupfyppzamj.supabase.co';
 const SUPABASE_PUBLISHABLE_KEY='sb_publishable_oq6KLlCX0CBDxydBXWkKjA__6veVLGY';
-let records=[],sidecars=new Map(),map,layer,communityLayer,exifr=null,communityPlaces=[];
+let records=[],sidecars=new Map(),map,layer,routeLayer,exifr=null,optimizedRoute=[];
 const setStatus=(m,e=false)=>{$('status').textContent=m;$('status').classList.toggle('error',e)};
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const validPair=(a,b)=>Number.isFinite(a)&&Number.isFinite(b)&&Math.abs(a)<=90&&Math.abs(b)<=180&&!(a===0&&b===0);
@@ -123,13 +101,7 @@ function initMap(){
   map=L.map('map').setView([23.685,90.356],7);
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; OpenStreetMap contributors'}).addTo(map);
   layer=L.layerGroup().addTo(map);
-  communityLayer=L.layerGroup().addTo(map);
-  map.on('click',e=>{
-    $('cLat').value=e.latlng.lat.toFixed(6);
-    $('cLon').value=e.latlng.lng.toFixed(6);
-    $('communityStatus').textContent='Coordinates selected from map. Confirm this is the pandal location before submitting.';
-    $('communityStatus').classList.remove('error');
-  });
+  routeLayer=L.layerGroup().addTo(map);
 }
 
 /* ---------- Built-in EXIF parser ----------
@@ -223,7 +195,7 @@ function fmtTime(t){
 }
 
 async function analyze(file){
-  const rec={name:file.name,size:file.size,lat:NaN,lon:NaN,time:'',src:'',note:'',file};
+  const rec={name:file.name,pandalName:'',size:file.size,lat:NaN,lon:NaN,time:'',src:'',note:'',file};
   try{
     const buf=await file.arrayBuffer();
     // 1) exifr
@@ -288,31 +260,46 @@ async function handle(list){
 
 function render(){
   const gps=records.filter(r=>validPair(r.lat,r.lon));
+  const named=gps.filter(r=>(r.pandalName||'').trim());
   $('nTotal').textContent=records.length;$('nGps').textContent=gps.length;$('nTime').textContent=records.filter(r=>r.time).length;
+  $('nPandal').textContent=named.length;$('nPuja').textContent=gps.length;
+  $('nUnlocated').textContent=records.length-gps.length;$('nNamed').textContent=named.length;
   ['csv','json','clear'].forEach(i=>$(i).disabled=!records.length);
+  $('planRoute').disabled=gps.length<2;
+  $('openRoute').disabled=optimizedRoute.length<2;
   const q=$('q').value.toLowerCase();
-  const shown=records.filter(r=>!q||[r.name,r.time,r.src,r.note].join(' ').toLowerCase().includes(q));
+  const shown=records.filter(r=>!q||[r.name,r.pandalName,r.time,r.src,r.note].join(' ').toLowerCase().includes(q));
   $('rows').innerHTML=shown.length?shown.map(r=>{
-    const ok=validPair(r.lat,r.lon);
-    return `<tr><td>${esc(r.name)}</td><td>${esc(r.time)||'—'}</td><td>${ok?r.lat.toFixed(6)+', '+r.lon.toFixed(6):'<span class="none">none</span>'}</td><td>${ok?'<span class="tag">'+esc(r.src)+'</span>':esc(r.note)}</td><td>${(r.size/1048576).toFixed(2)} MB</td></tr>`;
-  }).join(''):'<tr><td colspan="5" class="muted" style="text-align:center;padding:20px">Nothing yet.</td></tr>';
+    const ok=validPair(r.lat,r.lon),idx=records.indexOf(r);
+    return `<tr><td>${esc(r.name)}</td><td><input type="text" maxlength="160" data-pandal-name="${idx}" value="${esc(r.pandalName||'')}" placeholder="Optional pandal name" style="min-width:180px"></td><td>${esc(r.time)||'—'}</td><td>${ok?r.lat.toFixed(6)+', '+r.lon.toFixed(6):'<span class="none">none</span>'}</td><td>${ok?'<span class="tag">'+esc(r.src)+'</span>':esc(r.note)}</td><td>${(r.size/1048576).toFixed(2)} MB</td></tr>`;
+  }).join(''):'<tr><td colspan="6" class="muted" style="text-align:center;padding:20px">Nothing yet.</td></tr>';
+  $('rows').querySelectorAll('[data-pandal-name]').forEach(input=>{
+    input.addEventListener('change',()=>{
+      const r=records[Number(input.dataset.pandalName)];
+      if(!r)return;
+      r.pandalName=input.value.trim();
+      render();
+    });
+  });
   if(layer){
     layer.clearLayers();
     gps.forEach(r=>{
+      const title=(r.pandalName||'').trim()||r.name;
       const marker=L.circleMarker([r.lat,r.lon],{radius:8,color:'#172014',weight:2,fillColor:r.src==='Manual'?'#75c7ff':'#c4f36a',fillOpacity:.98})
-        .bindPopup('<b>'+esc(r.name)+'</b><br><span>Captured: '+esc(r.time||'Unknown')+'</span><br><span>GPS: '+r.lat.toFixed(6)+', '+r.lon.toFixed(6)+'</span><br><span>Source: '+esc(r.src||'Unknown')+'</span>')
+        .bindPopup('<b>'+esc(title)+'</b>'+(title!==r.name?'<br><span>'+esc(r.name)+'</span>':'')+'<br><span>Captured: '+esc(r.time||'Unknown')+'</span><br><span>GPS: '+r.lat.toFixed(6)+', '+r.lon.toFixed(6)+'</span><br><span>Source: '+esc(r.src||'Unknown')+'</span>')
         .addTo(layer);
       marker.on('click',()=>{
         const i=records.indexOf(r);
         $('mPhoto').value=String(i);
         $('mCoord').value=r.lat.toFixed(6)+', '+r.lon.toFixed(6);
-        $('mStatus').textContent='Selected '+r.name+' from the map.';
+        $('mPandalName').value=r.pandalName||'';
+        $('mStatus').textContent='Selected '+title+'.';
       });
     });
     if(gps.length)map.fitBounds(L.latLngBounds(gps.map(r=>[r.lat,r.lon])).pad(.2),{maxZoom:16});
   }
   const sel=$('mPhoto');sel.disabled=!records.length;
-  sel.innerHTML=records.length?records.map((r,i)=>`<option value="${i}">${esc(r.name)}</option>`).join(''):'<option>Import photos first</option>';
+  sel.innerHTML=records.length?records.map((r,i)=>`<option value="${i}">${esc(r.pandalName||r.name)}</option>`).join(''):'<option>Import photos first</option>';
   $('mApply').disabled=$('mClear').disabled=!records.length;
 }
 
@@ -332,152 +319,95 @@ function parseManual(s){
 $('mApply').onclick=()=>{
   const [a,b]=parseManual($('mCoord').value);
   if(!validPair(a,b)){$('mStatus').textContent='Could not read those coordinates.';return}
-  const r=records[+$('mPhoto').value];r.lat=a;r.lon=b;r.src='Manual';r.note='';
-  $('mStatus').textContent='Location applied to '+r.name;render();
+  const r=records[+$('mPhoto').value];r.lat=a;r.lon=b;r.src='Manual';r.note='';r.pandalName=$('mPandalName').value.trim();
+  $('mStatus').textContent='Location and pandal name saved for '+(r.pandalName||r.name);optimizedRoute=[];render();
 };
-$('mClear').onclick=()=>{const r=records[+$('mPhoto').value];r.lat=r.lon=NaN;r.src='';r.note='Location removed.';render()};
+$('mClear').onclick=()=>{const r=records[+$('mPhoto').value];r.lat=r.lon=NaN;r.src='';r.note='Location removed.';optimizedRoute=[];render()};
 
 function download(name,text,type){
   const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([text],{type}));a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);
 }
-const clean=()=>records.map(r=>({photo:r.name,capture_time:r.time,latitude:validPair(r.lat,r.lon)?r.lat:'',longitude:validPair(r.lat,r.lon)?r.lon:'',source:r.src,size_bytes:r.size}));
+const clean=()=>records.map(r=>({photo:r.name,pandal_name:r.pandalName||'',capture_time:r.time,latitude:validPair(r.lat,r.lon)?r.lat:'',longitude:validPair(r.lat,r.lon)?r.lon:'',source:r.src,size_bytes:r.size}));
 $('csv').onclick=()=>{const d=clean(),h=Object.keys(d[0]);download('photo-gps.csv',[h.join(','),...d.map(o=>h.map(k=>'"'+String(o[k]).replace(/"/g,'""')+'"').join(','))].join('\n'),'text/csv')};
 $('json').onclick=()=>download('photo-gps.json',JSON.stringify(clean(),null,2),'application/json');
-$('clear').onclick=()=>{records=[];sidecars.clear();render();setStatus('Cleared.')};
+$('clear').onclick=()=>{records=[];sidecars.clear();optimizedRoute=[];routeLayer?.clearLayers();render();setStatus('Cleared imported photos and locations.')};
 $('q').oninput=render;
-for(const id of ['files','photos','folder'])$(id).onchange=async e=>{await handle(e.target.files);e.target.value=''};
+for(const id of ['files','folder'])$(id).onchange=async e=>{await handle(e.target.files);optimizedRoute=[];e.target.value=''};
+$('mPhoto').addEventListener('change',()=>{
+  const r=records[+$('mPhoto').value];
+  if(!r)return;
+  $('mCoord').value=validPair(r.lat,r.lon)?r.lat.toFixed(6)+', '+r.lon.toFixed(6):'';
+  $('mPandalName').value=r.pandalName||'';
+  $('mStatus').textContent='Reviewing '+(r.pandalName||r.name)+'.';
+});
 
 
-async function loadCommunity(){
-  const status=$('communityStatus');
-  try{
-    const response=await fetch(SUPABASE_URL+'/rest/v1/pandals?select=id,name,district,upazila,address,description,latitude,longitude,created_at&order=name.asc',{
-      headers:{apikey:SUPABASE_PUBLISHABLE_KEY,Authorization:'Bearer '+SUPABASE_PUBLISHABLE_KEY}
-    });
-    if(!response.ok)throw new Error('Shared map request failed ('+response.status+').');
-    communityPlaces=await response.json();
-    if(!Array.isArray(communityPlaces))throw new Error('Unexpected shared map response.');
-    renderCommunity();
-    status.textContent='Shared map loaded. Only published pandals are shown; pending suggestions are not public.';
-    status.classList.remove('error');
-  }catch(error){
-    $('communityCount').textContent='Shared map unavailable';
-    $('communityList').innerHTML='<div class="muted">Could not load shared pandals right now. Your local photo map still works. Try Refresh shared map.</div>';
-    status.textContent=error.message||'Could not connect to the shared map.';
-    status.classList.add('error');
-  }
+
+function distanceKm(a,b){
+  const rad=x=>x*Math.PI/180,R=6371;
+  const dLat=rad(b.lat-a.lat),dLon=rad(b.lon-a.lon);
+  const h=Math.sin(dLat/2)**2+Math.cos(rad(a.lat))*Math.cos(rad(b.lat))*Math.sin(dLon/2)**2;
+  return 2*R*Math.asin(Math.min(1,Math.sqrt(h)));
 }
-function renderCommunity(){
-  $('communityCount').textContent=communityPlaces.length+' published pandal(s)';
-  $('communityList').innerHTML=communityPlaces.length?communityPlaces.map(p=>
-    '<article class="community-item"><b>'+esc(p.name)+'</b><small>'+esc([p.upazila,p.district].filter(Boolean).join(', '))+'</small>'+
-    (p.address?'<div>'+esc(p.address)+'</div>':'')+
-    (p.description?'<div>'+esc(p.description)+'</div>':'')+
-    '<div class="muted">'+Number(p.latitude).toFixed(6)+', '+Number(p.longitude).toFixed(6)+'</div>'+
-    '<button type="button" data-community-place="'+esc(p.id)+'" style="margin-top:7px">Show on map</button></article>'
-  ).join(''):'<div class="muted">No published pandals yet. Be the first to suggest one.</div>';
-  if(communityLayer){
-    communityLayer.clearLayers();
-    communityPlaces.forEach(p=>{
-      const lat=Number(p.latitude),lon=Number(p.longitude);
-      if(!Number.isFinite(lat)||!Number.isFinite(lon))return;
-      L.circleMarker([lat,lon],{radius:9,color:'#f3f5ed',weight:2,fillColor:'#64d9c3',fillOpacity:.98})
-        .bindPopup('<b>'+esc(p.name)+'</b><br>'+esc([p.upazila,p.district].filter(Boolean).join(', '))+
-          (p.address?'<br>'+esc(p.address):'')+'<br>GPS: '+lat.toFixed(6)+', '+lon.toFixed(6))
-        .addTo(communityLayer);
-    });
-  }
+function routeLength(list){
+  let sum=0;
+  for(let i=1;i<list.length;i++)sum+=distanceKm(list[i-1],list[i]);
+  return sum;
 }
-$('communityRefresh').addEventListener('click',loadCommunity);
-window.__fillCommunityCoordinates = async function(files){
-  const file = files && files[0];
-  if(!file)return;
-  const status = $('communityStatus');
-  status.classList.remove('error');
-  status.textContent = 'Reading GPS from '+file.name+' on this device…';
-  try{
-    const rec = await analyze(file);
-    if(validPair(rec.lat,rec.lon)){
-      $('cLat').value = rec.lat.toFixed(6);
-      $('cLon').value = rec.lon.toFixed(6);
-      if(map)map.setView([rec.lat,rec.lon],16);
-      status.textContent = 'GPS found in '+file.name+'. Coordinates filled in. Confirm the pandal location before submitting. The photo was not uploaded.';
-    }else{
-      status.textContent = 'No GPS coordinates were found in this photo. Tap the map or enter coordinates manually. The photo was not uploaded.';
-      status.classList.add('error');
+function optimizeStops(){
+  const stops=records.filter(r=>validPair(r.lat,r.lon));
+  if(stops.length<2){$('routeSummary').textContent='Import at least two photos with GPS to plan a route.';return}
+  // Try every start with nearest-neighbour, then improve each candidate with 2-opt.
+  let best=null,bestLen=Infinity;
+  for(let start=0;start<stops.length;start++){
+    const remaining=stops.filter((_,i)=>i!==start),candidate=[stops[start]];
+    while(remaining.length){
+      const last=candidate[candidate.length-1];
+      let bi=0,bd=Infinity;
+      for(let i=0;i<remaining.length;i++){const d=distanceKm(last,remaining[i]);if(d<bd){bd=d;bi=i}}
+      candidate.push(remaining.splice(bi,1)[0]);
     }
-  }catch(error){
-    status.textContent = 'Could not read this photo. Tap the map or enter coordinates manually. The photo was not uploaded.';
-    status.classList.add('error');
-  }
-};
-$('communityPickPhoto').addEventListener('click',async()=>{
-  if(typeof window.__pickOriginalPhotos === 'function'){
-    try{
-      const files = await window.__pickOriginalPhotos();
-      await window.__fillCommunityCoordinates(files);
-    }catch(error){
-      $('communityStatus').textContent = 'Photo selection cancelled or failed. You can tap the map or enter coordinates manually.';
+    let changed=true,passes=0;
+    while(changed&&passes++<Math.min(20,stops.length)){
+      changed=false;
+      for(let i=0;i<candidate.length-2;i++)for(let k=i+2;k<candidate.length;k++){
+        const before=(i?distanceKm(candidate[i-1],candidate[i]):0)+distanceKm(candidate[k],candidate[k+1]||candidate[k]);
+        const after=(i?distanceKm(candidate[i-1],candidate[k]):0)+distanceKm(candidate[i],candidate[k+1]||candidate[k]);
+        if(k===candidate.length-1) {
+          const old=(i?distanceKm(candidate[i-1],candidate[i]):0)+distanceKm(candidate[k-1],candidate[k]);
+          const neu=(i?distanceKm(candidate[i-1],candidate[k]):0)+distanceKm(candidate[i],candidate[k-1]);
+          if(neu+0.0001<old){candidate.splice(i,k-i+1,...candidate.slice(i,k+1).reverse());changed=true}
+        } else if(after+0.0001<before){candidate.splice(i,k-i+1,...candidate.slice(i,k+1).reverse());changed=true}
+      }
     }
-  }else{
-    $('communityPhotoFile').click();
+    const len=routeLength(candidate);
+    if(len<bestLen){best=candidate;bestLen=len}
   }
-});
-$('communityPhotoFile').addEventListener('change',async e=>{
-  if(e.target.files&&e.target.files.length)await window.__fillCommunityCoordinates(e.target.files);
-  e.target.value='';
-});
-$('communityList').addEventListener('click',e=>{
-  const button=e.target.closest('[data-community-place]');
-  if(!button||!map)return;
-  const p=communityPlaces.find(x=>x.id===button.dataset.communityPlace);
-  if(!p)return;
-  map.setView([Number(p.latitude),Number(p.longitude)],17);
-  communityLayer.eachLayer(marker=>{
-    const ll=marker.getLatLng();
-    if(Math.abs(ll.lat-Number(p.latitude))<1e-8&&Math.abs(ll.lng-Number(p.longitude))<1e-8)marker.openPopup();
+  optimizedRoute=best||[];
+  routeLayer.clearLayers();
+  const points=optimizedRoute.map(r=>[r.lat,r.lon]);
+  L.polyline(points,{color:'#ffb454',weight:4,opacity:.9,dashArray:'8 7'}).addTo(routeLayer);
+  optimizedRoute.forEach((r,i)=>{
+    L.marker([r.lat,r.lon],{icon:L.divIcon({className:'route-number',html:'<span>'+(i+1)+'</span>',iconSize:[30,30],iconAnchor:[15,15]})})
+      .bindPopup('<b>Stop '+(i+1)+': '+esc((r.pandalName||'').trim()||r.name)+'</b><br>'+r.lat.toFixed(6)+', '+r.lon.toFixed(6))
+      .addTo(routeLayer);
   });
-});
-$('communityForm').addEventListener('submit',async e=>{
-  e.preventDefault();
-  const status=$('communityStatus'),submit=$('communitySubmit');
-  const name=$('cName').value.trim(),district=$('cDistrict').value.trim();
-  const latitude=Number($('cLat').value),longitude=Number($('cLon').value);
-  if(name.length<2||!validPair(latitude,longitude)){
-    status.textContent='Enter a pandal name and valid non-zero GPS coordinates. Import a GPS photo or tap the map to set the location.';
-    status.classList.add('error');return;
-  }
-  submit.disabled=true;status.classList.remove('error');
-  status.textContent='Submitting your suggestion for review…';
-  const payload={
-    name,district:district||null,
-    upazila:$('cUpazila').value.trim()||null,
-    address:$('cAddress').value.trim()||null,
-    description:$('cDescription').value.trim()||null,
-    latitude,longitude
-  };
-  try{
-    const response=await fetch(SUPABASE_URL+'/rest/v1/pandal_submissions',{
-      method:'POST',
-      headers:{apikey:SUPABASE_PUBLISHABLE_KEY,Authorization:'Bearer '+SUPABASE_PUBLISHABLE_KEY,'Content-Type':'application/json',Prefer:'return=minimal'},
-      body:JSON.stringify(payload)
-    });
-    if(!response.ok){
-      let detail='Submission failed ('+response.status+').';
-      try{const data=await response.json();if(data.message)detail=data.message;else if(data.details)detail=data.details}catch{}
-      throw new Error(detail);
-    }
-    $('communityForm').reset();
-    await loadCommunity();
-    status.textContent='Suggestion submitted successfully. It is pending review and will not appear publicly until approved.';
-    status.classList.remove('error');
-  }catch(error){
-    status.textContent=(error.message||'Submission failed.')+' If this looks like a duplicate, check the shared map before trying again.';
-    status.classList.add('error');
-  }finally{submit.disabled=false}
+  $('routeStops').innerHTML=optimizedRoute.map((r,i)=>'<li><b>'+esc((r.pandalName||'').trim()||r.name)+'</b><div class="muted">'+(i?distanceKm(optimizedRoute[i-1],r).toFixed(1)+' km from previous stop':'Starting stop')+'</div></li>').join('');
+  $('routeSummary').textContent=optimizedRoute.length+' stops · approx. '+bestLen.toFixed(1)+' km straight-line distance. This is an efficient geographic order, not guaranteed shortest road distance.';
+  $('openRoute').disabled=false;
+  map.fitBounds(L.latLngBounds(points).pad(.2),{maxZoom:16});
+}
+$('planRoute').addEventListener('click',optimizeStops);
+$('openRoute').addEventListener('click',()=>{
+  if(optimizedRoute.length<2)return;
+  const enc=p=>p.lat+','+p.lon;
+  const first=optimizedRoute[0],last=optimizedRoute[optimizedRoute.length-1];
+  const waypoints=optimizedRoute.slice(1,-1).slice(0,9).map(enc).join('|');
+  const url='https://www.google.com/maps/dir/?api=1&origin='+encodeURIComponent(enc(first))+'&destination='+encodeURIComponent(enc(last))+(waypoints?'&waypoints='+encodeURIComponent(waypoints):'')+'&travelmode=driving';
+  window.open(url,'_blank','noopener');
 });
 
-initMap();render();loadCommunity();
+initMap();render();
 </script>
 </body>
 </html>

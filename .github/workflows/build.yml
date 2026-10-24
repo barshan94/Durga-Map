@@ -34,19 +34,31 @@ jobs:
               return r.files.map(function(f){
                 var bin=atob(f.data),u=new Uint8Array(bin.length);
                 for(var i=0;i<bin.length;i++)u[i]=bin.charCodeAt(i);
-                return new File([u],f.name,{type:'image/jpeg'});
+                return new File([u],f.name,{type:(/\.json$/i.test(f.name)?'application/json':'image/jpeg')});
+              });
+            }
+            async function pickOriginalFolder(){
+              var r=await P.pickFolder();
+              return r.files.map(function(f){
+                var bin=atob(f.data),u=new Uint8Array(bin.length);
+                for(var i=0;i<bin.length;i++)u[i]=bin.charCodeAt(i);
+                return new File([u],f.name,{type:(/\.json$/i.test(f.name)?'application/json':'image/jpeg')});
               });
             }
             window.__pickOriginalPhotos=pickOriginalPhotos;
-            var b=document.createElement('button');
-            b.className='btn primary';
-            b.textContent='Pick originals (app, keeps GPS)';
-            b.onclick=async function(){
-              try{window.__handle(await pickOriginalPhotos())}
-              catch(e){alert('Pick failed: '+(e.message||e))}
-            };
-            var row=document.querySelector('.row');
-            row.insertBefore(b,row.firstChild);
+            window.__pickOriginalFolder=pickOriginalFolder;
+            var fileButton=document.querySelector('label[for="files"]');
+            fileButton.addEventListener('click',function(e){
+              if(!C||!C.isNativePlatform||!C.isNativePlatform())return;
+              e.preventDefault();
+              pickOriginalPhotos().then(window.__handle).catch(function(err){alert('File selection failed: '+(err.message||err))});
+            });
+            var folderButton=document.querySelector('label[for="folder"]');
+            folderButton.addEventListener('click',function(e){
+              if(!C||!C.isNativePlatform||!C.isNativePlatform())return;
+              e.preventDefault();
+              pickOriginalFolder().then(window.__handle).catch(function(err){alert('Folder selection failed: '+(err.message||err))});
+            });
           })();
           EOF
       - name: Native code
@@ -62,6 +74,7 @@ jobs:
           import android.net.Uri;
           import android.provider.MediaStore;
           import android.provider.OpenableColumns;
+          import android.provider.DocumentsContract;
           import android.util.Base64;
           import androidx.activity.result.ActivityResult;
           import com.getcapacitor.JSArray;
@@ -82,9 +95,59 @@ jobs:
             public void pick(PluginCall call) {
               Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
               i.addCategory(Intent.CATEGORY_OPENABLE);
-              i.setType("image/*");
+              i.setType("*/*");
               i.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
               startActivityForResult(call, i, "onPicked");
+            }
+
+            @PluginMethod
+            public void pickFolder(PluginCall call) {
+              Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
+              startActivityForResult(call, i, "onFolderPicked");
+            }
+
+            @ActivityCallback
+            private void onFolderPicked(PluginCall call, ActivityResult result) {
+              if (call == null) return;
+              Intent data = result.getData();
+              if (data == null || data.getData() == null) { call.reject("No folder selected"); return; }
+              Uri tree = data.getData();
+              int flags = result.getResultCode();
+              try { getContext().getContentResolver().takePersistableUriPermission(tree, data.getFlags() & (Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION)); } catch (Exception ignored) {}
+              JSArray out = new JSArray();
+              collectFiles(tree, tree, out, 0);
+              JSObject ret = new JSObject();
+              ret.put("files", out);
+              call.resolve(ret);
+            }
+
+            private void collectFiles(Uri tree, Uri parent, JSArray out, int depth) {
+              if (depth > 12 || out.length() > 5000) return;
+              Uri children = DocumentsContract.buildChildDocumentsUriUsingTree(tree, DocumentsContract.getDocumentId(parent));
+              String[] cols = {DocumentsContract.Document.COLUMN_DOCUMENT_ID, DocumentsContract.Document.COLUMN_DISPLAY_NAME, DocumentsContract.Document.COLUMN_MIME_TYPE, DocumentsContract.Document.COLUMN_SIZE};
+              try (Cursor c = getContext().getContentResolver().query(children, cols, null, null, null)) {
+                if (c == null) return;
+                while (c.moveToNext() && out.length() <= 5000) {
+                  String id = c.getString(0), name = c.getString(1), mime = c.getString(2);
+                  Uri child = DocumentsContract.buildDocumentUriUsingTree(tree, id);
+                  if (DocumentsContract.Document.MIME_TYPE_DIR.equals(mime)) {
+                    collectFiles(tree, child, out, depth + 1);
+                  } else if ((mime != null && (mime.startsWith("image/") || mime.equals("application/json") || name.toLowerCase().endsWith(".json")))) {
+                    try {
+                      InputStream in = getContext().getContentResolver().openInputStream(child);
+                      if (in == null) continue;
+                      ByteArrayOutputStream bo = new ByteArrayOutputStream();
+                      byte[] buf = new byte[65536]; int n;
+                      while ((n = in.read(buf)) > 0) bo.write(buf, 0, n);
+                      in.close();
+                      JSObject o = new JSObject();
+                      o.put("name", name == null ? "photo.jpg" : name);
+                      o.put("data", Base64.encodeToString(bo.toByteArray(), Base64.NO_WRAP));
+                      out.put(o);
+                    } catch (Exception ignored) {}
+                  }
+                }
+              } catch (Exception ignored) {}
             }
 
             @ActivityCallback
