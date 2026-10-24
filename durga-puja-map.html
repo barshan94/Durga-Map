@@ -22,6 +22,18 @@ input[type=file]{width:100%;margin-top:8px;color:var(--muted);font:inherit}input
 th,td{text-align:left;padding:9px 11px;border-bottom:1px solid var(--line);font-size:13px}th{background:#1d2921;color:var(--muted)}
 .tag{background:#293a2d;color:var(--lime);padding:2px 7px;border-radius:6px;font-size:11px}.none{color:var(--err)}
 .warn{background:#2c2a18;border:1px solid #6b6430;border-radius:12px;padding:12px;margin:12px 0;font-size:13px}
+
+.community-list{display:grid;gap:8px;margin-top:10px}
+.community-item{background:var(--p2);border:1px solid var(--line);border-radius:10px;padding:10px}
+.community-item b{display:block}.community-item small{color:var(--muted)}
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
+.form-grid .full{grid-column:1/-1}
+@media(max-width:520px){.form-grid{grid-template-columns:1fr}.form-grid .full{grid-column:auto}}
+.community-input{width:100%;background:var(--bg);color:var(--text);border:1px solid var(--line);border-radius:9px;padding:10px;font:inherit}
+textarea.community-input{min-height:76px;resize:vertical}
+#communityStatus{margin-top:9px;font-size:13px;white-space:pre-wrap;color:var(--muted)}
+#communityStatus.error{color:var(--err)}
+
 </style>
 </head>
 <body>
@@ -59,14 +71,42 @@ th,td{text-align:left;padding:9px 11px;border-bottom:1px solid var(--line);font-
 </section>
 </div>
 
-<div class="row" style="justify-content:space-between;align-items:center"><h2 style="margin:12px 0 0">3 · Inventory</h2><input id="q" type="text" placeholder="Filter…" style="max-width:240px"></div>
+<section class="panel" style="margin-top:14px" aria-labelledby="communityHeading">
+  <h2 id="communityHeading">3 · Community Durga Puja Map</h2>
+  <p class="muted">Browse published pandals shared by the community, or suggest a new one. Suggestions stay private until reviewed. Photos are not uploaded.</p>
+  <div class="row">
+    <button id="communityRefresh" type="button">Refresh shared map</button>
+    <span id="communityCount" class="muted">Loading published pandals…</span>
+  </div>
+  <div id="communityList" class="community-list"><div class="muted">Connecting to the shared map…</div></div>
+  <h2 style="margin-top:18px">Suggest a pandal</h2>
+  <p class="muted">Tap the map to fill coordinates, or enter them below. Check the existing entries first to avoid duplicates.</p>
+  <form id="communityForm">
+    <div class="form-grid">
+      <input class="community-input" id="cName" name="name" required minlength="2" maxlength="160" placeholder="Pandal / Puja name">
+      <input class="community-input" id="cDistrict" name="district" required minlength="2" maxlength="100" placeholder="District (required)">
+      <input class="community-input" id="cUpazila" name="upazila" maxlength="100" placeholder="Upazila / area (optional)">
+      <input class="community-input" id="cAddress" name="address" maxlength="240" placeholder="Address / landmark (optional)">
+      <input class="community-input" id="cLat" name="latitude" type="number" min="-90" max="90" step="any" required placeholder="Latitude">
+      <input class="community-input" id="cLon" name="longitude" type="number" min="-180" max="180" step="any" required placeholder="Longitude">
+      <textarea class="community-input full" id="cDescription" name="description" maxlength="500" placeholder="Short details (optional)"></textarea>
+    </div>
+    <div class="row"><button class="primary" id="communitySubmit" type="submit">Submit for review</button></div>
+  </form>
+  <div id="communityStatus" role="status" aria-live="polite">The shared map is loading.</div>
+  <p class="muted">Duplicate protection: submissions within 30 metres of a recorded pandal are blocked. Matching names within 2 km are also flagged. A false match can be reviewed manually.</p>
+</section>
+
+<div class="row" style="justify-content:space-between;align-items:center"><h2 style="margin:12px 0 0">4 · Inventory</h2><input id="q" type="text" placeholder="Filter…" style="max-width:240px"></div>
 <div class="tw"><table><thead><tr><th>Photo</th><th>Capture time</th><th>GPS</th><th>Source / note</th><th>Size</th></tr></thead><tbody id="rows"><tr><td colspan="5" class="muted" style="text-align:center;padding:20px">Nothing yet.</td></tr></tbody></table></div>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script type="module">
 const $=id=>document.getElementById(id);
-let records=[],sidecars=new Map(),map,layer,exifr=null;
+const SUPABASE_URL='https://iomikfkjawupfyppzamj.supabase.co';
+const SUPABASE_PUBLISHABLE_KEY='sb_publishable_oq6KLlCX0CBDxydBXWkKjA__6veVLGY';
+let records=[],sidecars=new Map(),map,layer,communityLayer,exifr=null,communityPlaces=[];
 const setStatus=(m,e=false)=>{$('status').textContent=m;$('status').classList.toggle('error',e)};
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const validPair=(a,b)=>Number.isFinite(a)&&Number.isFinite(b)&&Math.abs(a)<=90&&Math.abs(b)<=180&&!(a===0&&b===0);
@@ -79,6 +119,13 @@ function initMap(){
   map=L.map('map').setView([23.685,90.356],7);
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; OpenStreetMap contributors'}).addTo(map);
   layer=L.layerGroup().addTo(map);
+  communityLayer=L.layerGroup().addTo(map);
+  map.on('click',e=>{
+    $('cLat').value=e.latlng.lat.toFixed(6);
+    $('cLon').value=e.latlng.lng.toFixed(6);
+    $('communityStatus').textContent='Coordinates selected from map. Confirm this is the pandal location before submitting.';
+    $('communityStatus').classList.remove('error');
+  });
 }
 
 /* ---------- Built-in EXIF parser ----------
@@ -296,7 +343,98 @@ $('clear').onclick=()=>{records=[];sidecars.clear();render();setStatus('Cleared.
 $('q').oninput=render;
 for(const id of ['files','photos','folder'])$(id).onchange=async e=>{await handle(e.target.files);e.target.value=''};
 
-initMap();render();
+
+async function loadCommunity(){
+  const status=$('communityStatus');
+  try{
+    const response=await fetch(SUPABASE_URL+'/rest/v1/pandals?select=id,name,district,upazila,address,description,latitude,longitude,created_at&order=name.asc',{
+      headers:{apikey:SUPABASE_PUBLISHABLE_KEY,Authorization:'Bearer '+SUPABASE_PUBLISHABLE_KEY}
+    });
+    if(!response.ok)throw new Error('Shared map request failed ('+response.status+').');
+    communityPlaces=await response.json();
+    if(!Array.isArray(communityPlaces))throw new Error('Unexpected shared map response.');
+    renderCommunity();
+    status.textContent='Shared map loaded. Only published pandals are shown; pending suggestions are not public.';
+    status.classList.remove('error');
+  }catch(error){
+    $('communityCount').textContent='Shared map unavailable';
+    $('communityList').innerHTML='<div class="muted">Could not load shared pandals right now. Your local photo map still works. Try Refresh shared map.</div>';
+    status.textContent=error.message||'Could not connect to the shared map.';
+    status.classList.add('error');
+  }
+}
+function renderCommunity(){
+  $('communityCount').textContent=communityPlaces.length+' published pandal(s)';
+  $('communityList').innerHTML=communityPlaces.length?communityPlaces.map(p=>
+    '<article class="community-item"><b>'+esc(p.name)+'</b><small>'+esc([p.upazila,p.district].filter(Boolean).join(', '))+'</small>'+
+    (p.address?'<div>'+esc(p.address)+'</div>':'')+
+    (p.description?'<div>'+esc(p.description)+'</div>':'')+
+    '<div class="muted">'+Number(p.latitude).toFixed(6)+', '+Number(p.longitude).toFixed(6)+'</div>'+
+    '<button type="button" data-community-place="'+esc(p.id)+'" style="margin-top:7px">Show on map</button></article>'
+  ).join(''):'<div class="muted">No published pandals yet. Be the first to suggest one.</div>';
+  if(communityLayer){
+    communityLayer.clearLayers();
+    communityPlaces.forEach(p=>{
+      const lat=Number(p.latitude),lon=Number(p.longitude);
+      if(!Number.isFinite(lat)||!Number.isFinite(lon))return;
+      L.circleMarker([lat,lon],{radius:9,color:'#f3f5ed',weight:2,fillColor:'#64d9c3',fillOpacity:.98})
+        .bindPopup('<b>'+esc(p.name)+'</b><br>'+esc([p.upazila,p.district].filter(Boolean).join(', '))+
+          (p.address?'<br>'+esc(p.address):'')+'<br>GPS: '+lat.toFixed(6)+', '+lon.toFixed(6))
+        .addTo(communityLayer);
+    });
+  }
+}
+$('communityRefresh').addEventListener('click',loadCommunity);
+$('communityList').addEventListener('click',e=>{
+  const button=e.target.closest('[data-community-place]');
+  if(!button||!map)return;
+  const p=communityPlaces.find(x=>x.id===button.dataset.communityPlace);
+  if(!p)return;
+  map.setView([Number(p.latitude),Number(p.longitude)],17);
+  communityLayer.eachLayer(marker=>{
+    const ll=marker.getLatLng();
+    if(Math.abs(ll.lat-Number(p.latitude))<1e-8&&Math.abs(ll.lng-Number(p.longitude))<1e-8)marker.openPopup();
+  });
+});
+$('communityForm').addEventListener('submit',async e=>{
+  e.preventDefault();
+  const status=$('communityStatus'),submit=$('communitySubmit');
+  const name=$('cName').value.trim(),district=$('cDistrict').value.trim();
+  const latitude=Number($('cLat').value),longitude=Number($('cLon').value);
+  if(name.length<2||district.length<2||!validPair(latitude,longitude)){
+    status.textContent='Enter a pandal name, district, and valid non-zero GPS coordinates.';
+    status.classList.add('error');return;
+  }
+  submit.disabled=true;status.classList.remove('error');
+  status.textContent='Submitting your suggestion for review…';
+  const payload={
+    name,district,
+    upazila:$('cUpazila').value.trim()||null,
+    address:$('cAddress').value.trim()||null,
+    description:$('cDescription').value.trim()||null,
+    latitude,longitude
+  };
+  try{
+    const response=await fetch(SUPABASE_URL+'/rest/v1/pandal_submissions',{
+      method:'POST',
+      headers:{apikey:SUPABASE_PUBLISHABLE_KEY,Authorization:'Bearer '+SUPABASE_PUBLISHABLE_KEY,'Content-Type':'application/json',Prefer:'return=minimal'},
+      body:JSON.stringify(payload)
+    });
+    if(!response.ok){
+      let detail='Submission failed ('+response.status+').';
+      try{const data=await response.json();if(data.message)detail=data.message;else if(data.details)detail=data.details}catch{}
+      throw new Error(detail);
+    }
+    $('communityForm').reset();
+    status.textContent='Suggestion submitted successfully. It is pending review and will not appear publicly until approved.';
+    await loadCommunity();
+  }catch(error){
+    status.textContent=(error.message||'Submission failed.')+' If this looks like a duplicate, check the shared map before trying again.';
+    status.classList.add('error');
+  }finally{submit.disabled=false}
+});
+
+initMap();render();loadCommunity();
 </script>
 </body>
 </html>
