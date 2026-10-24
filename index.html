@@ -426,8 +426,9 @@ $('communityForm').addEventListener('submit',async e=>{
       throw new Error(detail);
     }
     $('communityForm').reset();
-    status.textContent='Suggestion submitted successfully. It is pending review and will not appear publicly until approved.';
     await loadCommunity();
+    status.textContent='Suggestion submitted successfully. It is pending review and will not appear publicly until approved.';
+    status.classList.remove('error');
   }catch(error){
     status.textContent=(error.message||'Submission failed.')+' If this looks like a duplicate, check the shared map before trying again.';
     status.classList.add('error');
