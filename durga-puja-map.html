@@ -333,8 +333,9 @@ function render(){
     });
     if(gps.length)map.fitBounds(L.latLngBounds(gps.map(r=>[r.lat,r.lon])).pad(.2),{maxZoom:16});
   }
-  const sel=$('mPhoto');sel.disabled=!records.length;
-  sel.innerHTML=records.length?records.map((r,i)=>`<option value="${i}">${esc(r.pandalName||r.name)}</option>`).join(''):'<option>Import photos first</option>';
+  const sel=$('mPhoto'),previousSelection=sel.value;sel.disabled=!records.length;
+  sel.innerHTML=records.length?records.map((r,i)=>`<option value="${i}">${esc(r.pandalName||r.name)}${r.confirmed?' ✓':''}</option>`).join(''):'<option>Import photos first</option>';
+  if(records[Number(previousSelection)])sel.value=previousSelection;
   $('mApply').disabled=$('mClear').disabled=$('mConfirm').disabled=!records.length;
   const gpsCount=records.filter(r=>validPair(r.lat,r.lon)).length;
   $('mConfirmAll').disabled=!gpsCount;
