@@ -18,7 +18,8 @@ jobs:
       - run: npm install
       - run: |
           mkdir -p www
-          cp durga-puja-map.html www/index.html
+          cp "$(find . -name '*.html' -not -path './node_modules/*' -not -path './android/*' | head -n 1)" www/index.html
+          
           npx cap add android
       - name: Add permissions and startup request
         run: |
