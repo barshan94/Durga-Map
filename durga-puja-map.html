@@ -1,0 +1,292 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Durga Puja Map — Photo GPS Explorer</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+:root{color-scheme:dark;--bg:#101713;--panel:#19231d;--p2:#202d25;--line:#33483a;--text:#f3f5ed;--muted:#a8b7a9;--lime:#c4f36a;--err:#ff8f85}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:15px/1.5 system-ui,sans-serif}
+.wrap{max-width:1200px;margin:auto;padding:20px 14px 40px}h1{font-size:clamp(28px,5vw,48px);line-height:1.05;margin:12px 0}h1 span{color:var(--lime)}
+.muted{color:var(--muted);font-size:13px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}@media(max-width:800px){.grid{grid-template-columns:1fr}}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:16px;min-width:0}h2{font-size:17px;margin:0 0 8px}
+button,.btn{font:inherit;cursor:pointer;border:1px solid var(--line);background:var(--p2);color:var(--text);padding:10px 14px;border-radius:11px;font-weight:650;display:inline-block}
+button:disabled{opacity:.4;cursor:not-allowed}.primary{background:var(--lime);color:#172014;border-color:var(--lime)}
+input[type=file]{width:100%;margin-top:8px;color:var(--muted);font:inherit}input[type=text],select{width:100%;background:var(--bg);color:var(--text);border:1px solid var(--line);border-radius:9px;padding:10px;font:inherit}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px}
+.stat{background:var(--p2);border-radius:10px;padding:10px}.stat b{display:block;font-size:22px}
+#status{margin-top:10px;font-size:13px;color:var(--muted);white-space:pre-wrap}#status.error{color:var(--err)}
+#map{height:380px;border-radius:12px;border:1px solid var(--line)}
+.tw{overflow:auto;border:1px solid var(--line);border-radius:12px;margin-top:8px}table{border-collapse:collapse;width:100%;min-width:760px}
+th,td{text-align:left;padding:9px 11px;border-bottom:1px solid var(--line);font-size:13px}th{background:#1d2921;color:var(--muted)}
+.tag{background:#293a2d;color:var(--lime);padding:2px 7px;border-radius:6px;font-size:11px}.none{color:var(--err)}
+.warn{background:#2c2a18;border:1px solid #6b6430;border-radius:12px;padding:12px;margin:12px 0;font-size:13px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<p class="muted">Version 5</p><h1>Turn your photos into a <span>festival map.</span></h1>
+<p class="muted">Everything runs in your browser. Photos are never uploaded. Only map tiles are fetched from OpenStreetMap.</p>
+
+<div class="warn"><b>Important:</b> if you pick photos through your phone's <i>Photos / Gallery</i> picker, the browser usually receives them <b>with GPS removed</b> (Android and iOS both do this for privacy). Google Photos "location" may also exist only in Google's database, not in the file. Use <b>"Choose files (keeps GPS)"</b> below and select the original files from a folder (e.g. Downloads, DCIM/Camera), or downloaded originals from Google Photos.</div>
+
+<div class="grid">
+<section class="panel">
+<h2>1 · Import</h2>
+<div class="muted">Select photos (JPEG, HEIC, TIFF…) and optionally Google Takeout <code>.json</code> sidecars together.</div>
+<div class="row">
+<label class="btn primary" for="files">Choose files (keeps GPS)</label>
+<input id="files" type="file" multiple>
+<label class="btn" for="photos">Photo picker</label>
+<input id="photos" type="file" accept="image/*,.heic,.heif,.json" multiple>
+<label class="btn" for="folder">Select whole folder</label>
+<input id="folder" type="file" webkitdirectory multiple>
+</div>
+<div class="row"><button id="csv" disabled>Export CSV</button><button id="json" disabled>Export JSON</button><button id="clear" disabled>Clear</button></div>
+<div class="stats"><div class="stat"><b id="nTotal">0</b><span class="muted">Photos</span></div><div class="stat"><b id="nGps">0</b><span class="muted">With GPS</span></div><div class="stat"><b id="nTime">0</b><span class="muted">With time</span></div></div>
+<div id="status">Waiting for photos.</div>
+</section>
+
+<section class="panel">
+<h2>2 · Map</h2>
+<div id="map"></div>
+<h2 style="margin-top:14px;font-size:15px">Add location manually</h2>
+<select id="mPhoto" disabled><option>Import photos first</option></select>
+<input id="mCoord" type="text" style="margin-top:8px" placeholder="23.615944, 90.503167 or 23°36'57.4&quot;N 90°30'11.4&quot;E">
+<div class="row"><button id="mApply" class="primary" disabled>Apply</button><button id="mClear" disabled>Remove location</button></div>
+<div id="mStatus" class="muted" style="margin-top:6px"></div>
+</section>
+</div>
+
+<div class="row" style="justify-content:space-between;align-items:center"><h2 style="margin:12px 0 0">3 · Inventory</h2><input id="q" type="text" placeholder="Filter…" style="max-width:240px"></div>
+<div class="tw"><table><thead><tr><th>Photo</th><th>Capture time</th><th>GPS</th><th>Source / note</th><th>Size</th></tr></thead><tbody id="rows"><tr><td colspan="5" class="muted" style="text-align:center;padding:20px">Nothing yet.</td></tr></tbody></table></div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script type="module">
+const $=id=>document.getElementById(id);
+let records=[],sidecars=new Map(),map,layer,exifr=null;
+const setStatus=(m,e=false)=>{$('status').textContent=m;$('status').classList.toggle('error',e)};
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const validPair=(a,b)=>Number.isFinite(a)&&Number.isFinite(b)&&Math.abs(a)<=90&&Math.abs(b)<=180&&!(a===0&&b===0);
+
+// Optional library (decodes HEIC and odd layouts). Failure is fine: built-in parser is used.
+import('https://cdn.jsdelivr.net/npm/exifr@7.1.3/dist/full.esm.mjs').then(m=>exifr=m).catch(()=>{});
+
+function initMap(){
+  if(!window.L)return;
+  map=L.map('map').setView([23.685,90.356],7);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; OpenStreetMap contributors'}).addTo(map);
+  layer=L.layerGroup().addTo(map);
+}
+
+/* ---------- Built-in EXIF parser ----------
+   Instead of walking JPEG segments (which breaks on Pixel/MPF/HEIC files),
+   find every TIFF header ("II*\0" or "MM\0*") anywhere in the file and try
+   to read GPS from it. */
+function parseTiff(dv,base){
+  const sig=dv.getUint16(base,false);
+  const le=sig===0x4949;
+  if(!le&&sig!==0x4d4d)return null;
+  if(dv.getUint16(base+2,le)!==42)return null;
+  const u16=p=>dv.getUint16(p,le),u32=p=>dv.getUint32(p,le);
+  const readIfd=off=>{
+    const out={},n=u16(base+off);
+    if(n>500)throw new Error('bad IFD');
+    for(let i=0;i<n;i++){
+      const p=base+off+2+i*12,tag=u16(p),type=u16(p+2),cnt=u32(p+4);
+      out[tag]={p,type,cnt,val:u32(p+8)};
+    }
+    return out;
+  };
+  const ifd0=readIfd(u32(base+4));
+  const res={lat:NaN,lon:NaN,time:null};
+  const ascii=(e)=>{ // ASCII value; inline if <=4 bytes
+    const start=e.cnt<=4?e.p+8:base+e.val;let s='';
+    for(let i=0;i<e.cnt-1;i++)s+=String.fromCharCode(dv.getUint8(start+i));
+    return s;
+  };
+  if(ifd0[0x8769]){
+    try{const ex=readIfd(ifd0[0x8769].val);const t=ex[0x9003]||ex[0x9004];if(t)res.time=ascii(t)}catch{}
+  }
+  if(!res.time&&ifd0[0x132]){try{res.time=ascii(ifd0[0x132])}catch{}}
+  if(ifd0[0x8825]){
+    const g=readIfd(ifd0[0x8825].val);res.gpsTags=Object.keys(g).join(',');
+    const dms=e=>{
+      if(!e||e.cnt<3||(e.type!==5&&e.type!==10))return NaN;
+      const o=base+e.val,v=[];
+      for(let i=0;i<3;i++){
+        const a=e.type===5?dv.getUint32(o+i*8,le):dv.getInt32(o+i*8,le);
+        const b=e.type===5?dv.getUint32(o+i*8+4,le):dv.getInt32(o+i*8+4,le);
+        v.push(b?a/b:0);
+      }
+      return Math.abs(v[0])+v[1]/60+v[2]/3600;
+    };
+    const ref=e=>e?String.fromCharCode(dv.getUint8(e.p+8)).toUpperCase():'';
+    let lat=dms(g[2]),lon=dms(g[4]);
+    if(ref(g[1])==='S')lat=-lat;
+    if(ref(g[3])==='W')lon=-lon;
+    res.lat=lat;res.lon=lon;
+  }
+  return res;
+}
+function readExifBuiltIn(buf){
+  const u8=new Uint8Array(buf),dv=new DataView(buf);
+  let time=null,dbg='No GPS block in EXIF';
+  for(let i=0;i+8<u8.length;i++){
+    const a=u8[i],b=u8[i+1];
+    if(!((a===0x49&&b===0x49&&u8[i+2]===42&&u8[i+3]===0)||(a===0x4d&&b===0x4d&&u8[i+2]===0&&u8[i+3]===42)))continue;
+    try{
+      const r=parseTiff(dv,i);
+      if(!r)continue;
+      if(r.time&&!time)time=r.time;
+      if(r.gpsTags!==undefined)dbg='GPS block exists but tags='+(r.gpsTags||'none')+' (need 1-4 for coordinates)';
+      if(validPair(r.lat,r.lon))return {lat:r.lat,lon:r.lon,time:r.time||time,src:'EXIF (built-in)'};
+    }catch{}
+  }
+  return {lat:NaN,lon:NaN,time,src:'',dbg};
+}
+
+/* ---------- XMP fallback ---------- */
+function xmpCoord(raw){
+  if(!raw)return NaN;
+  const s=raw.trim();const ref=(s.match(/[NSEW]/i)||[''])[0].toUpperCase();
+  const n=(s.match(/\d+(?:\.\d+)?/g)||[]).map(Number);
+  if(!n.length)return NaN;
+  let v=n[0]+(n[1]||0)/60+(n[2]||0)/3600;
+  if(ref==='S'||ref==='W')v=-v;
+  return v;
+}
+function readXmp(buf){
+  const txt=new TextDecoder('latin1').decode(buf);
+  const g=n=>{let i=txt.indexOf(n);while(i>=0){const sn=txt.substr(i,160);const m=sn.match(/^[\w]*\s*=\s*"([^"]{1,60})"/)||sn.match(/^[\w]*>([^<]{1,60})</);if(m)return m[1];i=txt.indexOf(n,i+1)}return null};
+  const lat=xmpCoord(g('GPSLatitude')),lon=xmpCoord(g('GPSLongitude'));
+  return validPair(lat,lon)?{lat,lon,src:'XMP'}:null;
+}
+
+function fmtTime(t){
+  if(!t)return '';
+  if(t instanceof Date)return isNaN(t)?'':t.toISOString().slice(0,19).replace('T',' ');
+  return String(t).replace(/^(\d{4}):(\d\d):(\d\d)/,'$1-$2-$3');
+}
+
+async function analyze(file){
+  const rec={name:file.name,size:file.size,lat:NaN,lon:NaN,time:'',src:'',note:'',file};
+  try{
+    const buf=await file.arrayBuffer();
+    // 1) exifr
+    if(exifr){
+      try{
+        const g=await exifr.gps(buf);
+        if(g&&validPair(g.latitude,g.longitude)){rec.lat=g.latitude;rec.lon=g.longitude;rec.src='EXIF (exifr)'}
+        const t=await exifr.parse(buf,['DateTimeOriginal','CreateDate']);
+        if(t)rec.time=fmtTime(t.DateTimeOriginal||t.CreateDate);
+      }catch{}
+    }
+    // 2) built-in
+    if(!validPair(rec.lat,rec.lon)||!rec.time){
+      const b=readExifBuiltIn(buf);rec.dbg=b.dbg;
+      if(!rec.time&&b.time)rec.time=fmtTime(b.time);
+      if(!validPair(rec.lat,rec.lon)&&validPair(b.lat,b.lon)){rec.lat=b.lat;rec.lon=b.lon;rec.src=b.src}
+    }
+    // 3) XMP
+    if(!validPair(rec.lat,rec.lon)){
+      const x=readXmp(buf);
+      if(x){rec.lat=x.lat;rec.lon=x.lon;rec.src=x.src}
+    }
+    if(!validPair(rec.lat,rec.lon)){rec.lat=NaN;rec.lon=NaN}
+  }catch(e){rec.note='Read error: '+(e.message||e)}
+  return rec;
+}
+
+function applySidecar(rec){
+  const key=n=>n.toLowerCase().replace(/\.(supplemental-metadata|supplemental-meta|supplemental-metadat|supplemental-m|supplemental-)?\.?json$/,'').replace(/\(\d+\)/,'');
+  const sc=sidecars.get(key(rec.name))||sidecars.get(rec.name.toLowerCase());
+  if(!sc)return;
+  if(!validPair(rec.lat,rec.lon)){
+    for(const k of ['geoDataExif','geoData']){
+      const g=sc[k];
+      if(g&&validPair(+g.latitude,+g.longitude)){rec.lat=+g.latitude;rec.lon=+g.longitude;rec.src='Google sidecar';break}
+    }
+  }
+  if(!rec.time&&sc.photoTakenTime?.timestamp)rec.time=new Date(sc.photoTakenTime.timestamp*1000).toISOString().slice(0,19).replace('T',' ');
+}
+
+async function handle(list){
+  const files=[...list];if(!files.length)return;
+  const jsons=files.filter(f=>/\.json$/i.test(f.name)),photos=files.filter(f=>!/\.json$/i.test(f.name));
+  setStatus('Reading '+files.length+' file(s)…');
+  for(const j of jsons){
+    try{
+      const d=JSON.parse(await j.text());
+      const k1=j.name.toLowerCase().replace(/\.(supplemental-metadata|supplemental-meta|supplemental-metadat|supplemental-m|supplemental-)?\.?json$/,'').replace(/\(\d+\)/,'');
+      sidecars.set(k1,d);if(d.title)sidecars.set(String(d.title).toLowerCase(),d);
+    }catch{}
+  }
+  for(const f of photos){const r=await analyze(f);records.push(r)}
+  records.forEach(applySidecar);
+  records.forEach(r=>{
+    if(validPair(r.lat,r.lon))r.note='';
+    else if(!r.note)r.note='['+(r.dbg||'')+'] No GPS inside this file. If exiftool shows GPS for the original, this copy was stripped by the picker — re-select it with "Choose files (keeps GPS)".';
+  });
+  render();
+  const g=records.filter(r=>validPair(r.lat,r.lon)).length;
+  setStatus(g?`Done. ${g} of ${records.length} photo(s) have GPS.`:'No GPS found in any selected file. See the note in the table.',!g);
+}
+
+function render(){
+  const gps=records.filter(r=>validPair(r.lat,r.lon));
+  $('nTotal').textContent=records.length;$('nGps').textContent=gps.length;$('nTime').textContent=records.filter(r=>r.time).length;
+  ['csv','json','clear'].forEach(i=>$(i).disabled=!records.length);
+  const q=$('q').value.toLowerCase();
+  const shown=records.filter(r=>!q||[r.name,r.time,r.src,r.note].join(' ').toLowerCase().includes(q));
+  $('rows').innerHTML=shown.length?shown.map(r=>{
+    const ok=validPair(r.lat,r.lon);
+    return `<tr><td>${esc(r.name)}</td><td>${esc(r.time)||'—'}</td><td>${ok?r.lat.toFixed(6)+', '+r.lon.toFixed(6):'<span class="none">none</span>'}</td><td>${ok?'<span class="tag">'+esc(r.src)+'</span>':esc(r.note)}</td><td>${(r.size/1048576).toFixed(2)} MB</td></tr>`;
+  }).join(''):'<tr><td colspan="5" class="muted" style="text-align:center;padding:20px">Nothing yet.</td></tr>';
+  if(layer){
+    layer.clearLayers();
+    gps.forEach(r=>L.circleMarker([r.lat,r.lon],{radius:7,color:'#172014',weight:2,fillColor:'#c4f36a',fillOpacity:.95}).bindPopup(esc(r.name)+'<br>'+esc(r.time)).addTo(layer));
+    if(gps.length)map.fitBounds(L.latLngBounds(gps.map(r=>[r.lat,r.lon])).pad(.2),{maxZoom:16});
+  }
+  const sel=$('mPhoto');sel.disabled=!records.length;
+  sel.innerHTML=records.length?records.map((r,i)=>`<option value="${i}">${esc(r.name)}</option>`).join(''):'<option>Import photos first</option>';
+  $('mApply').disabled=$('mClear').disabled=!records.length;
+}
+
+function parseManual(s){
+  s=s.trim().replace(/&quot;/g,'"');
+  const re=/(\d+(?:\.\d+)?)\s*°\s*(?:(\d+(?:\.\d+)?)\s*['′’]\s*)?(?:(\d+(?:\.\d+)?)\s*(?:["″”]|''))?\s*([NSEW])/gi;
+  const m=[...s.matchAll(re)];
+  if(m.length>=2){
+    const cv=x=>{let v=+x[1]+(+x[2]||0)/60+(+x[3]||0)/3600;return /[SW]/i.test(x[4])?-v:v};
+    let a=null,b=null;
+    for(const x of m){if(/[NS]/i.test(x[4]))a=cv(x);else b=cv(x)}
+    return [a,b];
+  }
+  const n=s.match(/-?\d+(?:\.\d+)?/g);
+  return n&&n.length>=2?[+n[0],+n[1]]:[NaN,NaN];
+}
+$('mApply').onclick=()=>{
+  const [a,b]=parseManual($('mCoord').value);
+  if(!validPair(a,b)){$('mStatus').textContent='Could not read those coordinates.';return}
+  const r=records[+$('mPhoto').value];r.lat=a;r.lon=b;r.src='Manual';r.note='';
+  $('mStatus').textContent='Location applied to '+r.name;render();
+};
+$('mClear').onclick=()=>{const r=records[+$('mPhoto').value];r.lat=r.lon=NaN;r.src='';r.note='Location removed.';render()};
+
+function download(name,text,type){
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([text],{type}));a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+}
+const clean=()=>records.map(r=>({photo:r.name,capture_time:r.time,latitude:validPair(r.lat,r.lon)?r.lat:'',longitude:validPair(r.lat,r.lon)?r.lon:'',source:r.src,size_bytes:r.size}));
+$('csv').onclick=()=>{const d=clean(),h=Object.keys(d[0]);download('photo-gps.csv',[h.join(','),...d.map(o=>h.map(k=>'"'+String(o[k]).replace(/"/g,'""')+'"').join(','))].join('\n'),'text/csv')};
+$('json').onclick=()=>download('photo-gps.json',JSON.stringify(clean(),null,2),'application/json');
+$('clear').onclick=()=>{records=[];sidecars.clear();render();setStatus('Cleared.')};
+$('q').oninput=render;
+for(const id of ['files','photos','folder'])$(id).onchange=async e=>{await handle(e.target.files);e.target.value=''};
+
+initMap();render();
+</script>
+</body>
+</html>
