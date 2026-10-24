@@ -247,7 +247,17 @@ function render(){
   }).join(''):'<tr><td colspan="5" class="muted" style="text-align:center;padding:20px">Nothing yet.</td></tr>';
   if(layer){
     layer.clearLayers();
-    gps.forEach(r=>L.circleMarker([r.lat,r.lon],{radius:7,color:'#172014',weight:2,fillColor:'#c4f36a',fillOpacity:.95}).bindPopup(esc(r.name)+'<br>'+esc(r.time)).addTo(layer));
+    gps.forEach(r=>{
+      const marker=L.circleMarker([r.lat,r.lon],{radius:8,color:'#172014',weight:2,fillColor:r.src==='Manual'?'#75c7ff':'#c4f36a',fillOpacity:.98})
+        .bindPopup('<b>'+esc(r.name)+'</b><br><span>Captured: '+esc(r.time||'Unknown')+'</span><br><span>GPS: '+r.lat.toFixed(6)+', '+r.lon.toFixed(6)+'</span><br><span>Source: '+esc(r.src||'Unknown')+'</span>')
+        .addTo(layer);
+      marker.on('click',()=>{
+        const i=records.indexOf(r);
+        $('mPhoto').value=String(i);
+        $('mCoord').value=r.lat.toFixed(6)+', '+r.lon.toFixed(6);
+        $('mStatus').textContent='Selected '+r.name+' from the map.';
+      });
+    });
     if(gps.length)map.fitBounds(L.latLngBounds(gps.map(r=>[r.lat,r.lon])).pad(.2),{maxZoom:16});
   }
   const sel=$('mPhoto');sel.disabled=!records.length;
