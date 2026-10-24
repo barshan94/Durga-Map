@@ -13,7 +13,7 @@
 .panel{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:16px;min-width:0}h2{font-size:17px;margin:0 0 8px}
 button,.btn{font:inherit;cursor:pointer;border:1px solid var(--line);background:var(--p2);color:var(--text);padding:10px 14px;border-radius:11px;font-weight:650;display:inline-block}
 button:disabled{opacity:.4;cursor:not-allowed}.primary{background:var(--lime);color:#172014;border-color:var(--lime)}
-input[type=file]{width:100%;margin-top:8px;color:var(--muted);font:inherit}input[type=text],select{width:100%;background:var(--bg);color:var(--text);border:1px solid var(--line);border-radius:9px;padding:10px;font:inherit}
+input[type=file]{display:none}input[type=text],select{width:100%;background:var(--bg);color:var(--text);border:1px solid var(--line);border-radius:9px;padding:10px;font:inherit}
 .row{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px}
 .stat{background:var(--p2);border-radius:10px;padding:10px}.stat b{display:block;font-size:22px}
 #status{margin-top:10px;font-size:13px;color:var(--muted);white-space:pre-wrap}#status.error{color:var(--err)}
@@ -279,7 +279,7 @@ function render(){
   const gps=records.filter(r=>validPair(r.lat,r.lon));
   const unique=uniquePujaLocations();
   const named=unique.filter(r=>(r.pandalName||'').trim());
-  $('nTotal').textContent=records.length;$('nGps').textContent=gps.length;$('nTime').textContent=records.filter(r=>r.time).length;
+  $('nTotal').textContent=records.length;$('nGps').textContent=gps.length;
   $('nPandal').textContent=named.length;$('nPuja').textContent=unique.length;
   $('nUnlocated').textContent=records.length-gps.length;$('nNamed').textContent=named.length;
   ['csv','json','clear'].forEach(i=>$(i).disabled=!records.length);
