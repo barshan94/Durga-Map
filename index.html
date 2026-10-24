@@ -22,6 +22,7 @@ input[type=file]{display:none}input[type=text],select{width:100%;background:var(
 th,td{text-align:left;padding:9px 11px;border-bottom:1px solid var(--line);font-size:13px}th{background:#1d2921;color:var(--muted)}
 .tag{background:#293a2d;color:var(--lime);padding:2px 7px;border-radius:6px;font-size:11px}.none{color:var(--err)}
 .warn{background:#2c2a18;border:1px solid #6b6430;border-radius:12px;padding:12px;margin:12px 0;font-size:13px}
+.review-list{display:grid;gap:7px;margin-top:12px;max-height:260px;overflow:auto}.review-item{display:flex;gap:10px;align-items:center;justify-content:space-between;background:var(--p2);border:1px solid var(--line);border-radius:10px;padding:9px}.review-item .review-info{min-width:0;overflow-wrap:anywhere}.review-item .review-meta{font-size:12px;color:var(--muted)}.review-item button{padding:6px 10px;flex-shrink:0}.review-state{font-size:11px;color:var(--lime)}
 
 .route-number{background:transparent;border:0}
 .route-number span{display:flex;align-items:center;justify-content:center;width:30px;height:30px;border:2px solid #101713;border-radius:50%;background:#ffb454;color:#172014;font-weight:800;box-shadow:0 2px 7px #0008}
@@ -55,8 +56,9 @@ th,td{text-align:left;padding:9px 11px;border-bottom:1px solid var(--line);font-
 <input id="mPandalName" type="text" maxlength="160" style="margin-top:4px" placeholder="e.g. Ramna Kali Mandir Puja">
 <label class="muted" for="mCoord" style="display:block;margin-top:10px">GPS coordinates</label>
 <input id="mCoord" type="text" style="margin-top:4px" placeholder="23.615944, 90.503167 or 23°36'57.4&quot;N 90°30'11.4&quot;E">
-<div class="row"><button id="mApply" class="primary" disabled>Save location and name</button><button id="mClear" disabled>Remove GPS</button></div>
+<div class="row"><button id="mApply" class="primary" disabled>Save location and name</button><button id="mConfirm" disabled>Confirm this location</button><button id="mClear" disabled>Remove GPS</button><button id="mConfirmAll" disabled>Confirm all GPS locations</button></div>
 <div id="mStatus" class="muted" style="margin-top:6px"></div>
+<div id="reviewList" class="review-list" aria-live="polite"></div>
 </section>
 </div>
 
@@ -88,7 +90,22 @@ th,td{text-align:left;padding:9px 11px;border-bottom:1px solid var(--line);font-
 const $=id=>document.getElementById(id);
 const SUPABASE_URL='https://iomikfkjawupfyppzamj.supabase.co';
 const SUPABASE_PUBLISHABLE_KEY='sb_publishable_oq6KLlCX0CBDxydBXWkKjA__6veVLGY';
-let records=[],sidecars=new Map(),map,layer,routeLayer,exifr=null,optimizedRoute=[];
+function loadSavedRecords(){
+  try{
+    const saved=JSON.parse(localStorage.getItem('durgaMap.records.v1')||'[]');
+    if(!Array.isArray(saved))return [];
+    return saved.map(r=>({...r,lat:Number.isFinite(r.lat)?r.lat:NaN,lon:Number.isFinite(r.lon)?r.lon:NaN,file:null}));
+  }catch{return []}
+}
+let records=loadSavedRecords(),sidecars=new Map(),map,layer,routeLayer,exifr=null,optimizedRoute=[];
+function persistRecords(){
+  try{
+    localStorage.setItem('durgaMap.records.v1',JSON.stringify(records.map(r=>({
+      name:r.name,pandalName:r.pandalName||'',size:r.size||0,lat:validPair(r.lat,r.lon)?r.lat:null,
+      lon:validPair(r.lat,r.lon)?r.lon:null,time:r.time||'',src:r.src||'',note:r.note||'',confirmed:!!r.confirmed
+    }))));
+  }catch(e){console.warn('Could not persist Durga Map records',e)}
+}
 const setStatus=(m,e=false)=>{$('status').textContent=m;$('status').classList.toggle('error',e)};
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const validPair=(a,b)=>Number.isFinite(a)&&Number.isFinite(b)&&Math.abs(a)<=90&&Math.abs(b)<=180&&!(a===0&&b===0);
@@ -316,9 +333,24 @@ function render(){
     });
     if(gps.length)map.fitBounds(L.latLngBounds(gps.map(r=>[r.lat,r.lon])).pad(.2),{maxZoom:16});
   }
-  const sel=$('mPhoto');sel.disabled=!records.length;
-  sel.innerHTML=records.length?records.map((r,i)=>`<option value="${i}">${esc(r.pandalName||r.name)}</option>`).join(''):'<option>Import photos first</option>';
-  $('mApply').disabled=$('mClear').disabled=!records.length;
+  const sel=$('mPhoto'),previousSelection=sel.value;sel.disabled=!records.length;
+  sel.innerHTML=records.length?records.map((r,i)=>`<option value="${i}">${esc(r.pandalName||r.name)}${r.confirmed?' ✓':''}</option>`).join(''):'<option>Import photos first</option>';
+  if(records[Number(previousSelection)])sel.value=previousSelection;
+  $('mApply').disabled=$('mClear').disabled=$('mConfirm').disabled=!records.length;
+  const gpsCount=records.filter(r=>validPair(r.lat,r.lon)).length;
+  $('mConfirmAll').disabled=!gpsCount;
+  $('reviewList').innerHTML=records.length?records.map((r,i)=>{
+    const hasGps=validPair(r.lat,r.lon);
+    const label=(r.pandalName||'').trim()||r.name;
+    const state=r.confirmed?'Confirmed':(hasGps?'GPS found · needs confirmation':'GPS missing');
+    return '<div class="review-item"><div class="review-info"><strong>'+esc(label)+'</strong><div class="review-meta">'+(hasGps?esc(r.lat.toFixed(6)+', '+r.lon.toFixed(6)):'No GPS coordinates')+' · '+esc(state)+'</div></div><button type="button" data-review-index="'+i+'">Review</button></div>';
+  }).join(''):'<p class="muted">No photos imported yet. Import photos to review each location.</p>';
+  $('reviewList').querySelectorAll('[data-review-index]').forEach(button=>button.addEventListener('click',()=>{
+    $('mPhoto').value=button.dataset.reviewIndex;
+    $('mPhoto').dispatchEvent(new Event('change'));
+    $('mCoord').focus();
+  }));
+  persistRecords();
 }
 
 function parseManual(s){
@@ -337,10 +369,26 @@ function parseManual(s){
 $('mApply').onclick=()=>{
   const [a,b]=parseManual($('mCoord').value);
   if(!validPair(a,b)){$('mStatus').textContent='Could not read those coordinates.';return}
-  const r=records[+$('mPhoto').value];r.lat=a;r.lon=b;r.src='Manual';r.note='';r.pandalName=$('mPandalName').value.trim();
-  $('mStatus').textContent='Location and pandal name saved for '+(r.pandalName||r.name);optimizedRoute=[];render();
+  const r=records[+$('mPhoto').value];if(!r)return;r.lat=a;r.lon=b;r.src='Manual';r.note='';r.pandalName=$('mPandalName').value.trim();r.confirmed=true;
+  $('mStatus').textContent='Location and pandal name saved and confirmed for '+(r.pandalName||r.name);optimizedRoute=[];render();
 };
-$('mClear').onclick=()=>{const r=records[+$('mPhoto').value];r.lat=r.lon=NaN;r.src='';r.note='Location removed.';optimizedRoute=[];render()};
+$('mConfirm').onclick=()=>{
+  const r=records[+$('mPhoto').value];
+  if(!r)return;
+  if(!validPair(r.lat,r.lon)){$('mStatus').textContent='This photo has no valid GPS coordinates to confirm.';return}
+  r.pandalName=$('mPandalName').value.trim();
+  r.confirmed=true;
+  $('mStatus').textContent='Confirmed '+(r.pandalName||r.name)+'.';
+  render();
+};
+$('mConfirmAll').onclick=()=>{
+  const gps=records.filter(r=>validPair(r.lat,r.lon));
+  if(!gps.length)return;
+  gps.forEach(r=>{r.confirmed=true});
+  $('mStatus').textContent='Confirmed all '+gps.length+' photo location(s) with valid GPS.';
+  render();
+};
+$('mClear').onclick=()=>{const r=records[+$('mPhoto').value];if(!r)return;r.lat=r.lon=NaN;r.src='';r.confirmed=false;r.note='Location removed.';optimizedRoute=[];render()};
 
 function download(name,text,type){
   const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([text],{type}));a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);
@@ -356,7 +404,7 @@ $('mPhoto').addEventListener('change',()=>{
   if(!r)return;
   $('mCoord').value=validPair(r.lat,r.lon)?r.lat.toFixed(6)+', '+r.lon.toFixed(6):'';
   $('mPandalName').value=r.pandalName||'';
-  $('mStatus').textContent='Reviewing '+(r.pandalName||r.name)+'.';
+  $('mStatus').textContent='Reviewing '+(r.pandalName||r.name)+(r.confirmed?' · already confirmed':' · not confirmed yet')+'.';
 });
 
 
