@@ -45,9 +45,9 @@ Turn Durga Map from a personal GPS-photo explorer into a shared, community-contr
 
 1. **Foundation and safety rules** — document the MVP, data model, moderation, and privacy rules. (This document.)
 2. **Dedicated backend** — set up a separate Supabase project for Durga Map (do not reuse the Money Calculator database). Confirm cost/plan before creating anything billable.
-3. **Database and access control** — create places and reports tables with row-level security; anonymous visitors can read published places only, while submissions are controlled.
-4. **Contribution flow** — let a contributor add a pandal with name, map position, area, and Puja year; show clear pending-review status.
-5. **Moderation workflow** — approve, reject, flag duplicates, and request corrections without deleting audit history.
+3. **Database and access control** — initial `pandals` and `pandal_submissions` tables are live with RLS. Public visitors can read published pandals; new submissions remain pending and are not readable publicly. Database triggers block submissions within 30 metres of another pandal and matching normalized names within 2 km.
+4. **Contribution flow** — first version committed to `index.html` and `durga-puja-map.html`: users can submit a pandal name, district/area, optional address/details, and map coordinates; submissions remain pending review. The app reads published pandals from Supabase and displays shared markers.
+5. **Moderation workflow** — next: create a safe moderator-only approval/rejection workflow. Until then, submissions require manual review in the Supabase dashboard; do not expose approval actions to the public client.
 6. **Shared map** — load published places from the backend; add search and filters for area and year.
 7. **Accounts and abuse controls** — add sign-in before public submission, rate limits, basic anti-spam controls, and moderator permissions.
 8. **Optional photo contributions** — only after consent, storage rules, and moderation are implemented.
@@ -55,7 +55,7 @@ Turn Durga Map from a personal GPS-photo explorer into a shared, community-contr
 
 ## Architecture direction
 
-The current project is a static HTML/Leaflet app wrapped with Capacitor for Android. A managed backend is needed for a genuinely shared map. Supabase is the proposed option because it can provide PostgreSQL, authentication, and storage without replacing the current frontend. Use a **separate Durga Map project**, least-privilege row-level security, and a public/publish workflow. The backend is not connected yet.
+The current project is a static HTML/Leaflet app wrapped with Capacitor for Android. A managed backend is needed for a genuinely shared map. Supabase is the proposed option because it can provide PostgreSQL, authentication, and storage without replacing the current frontend. Use a **separate Durga Map project**, least-privilege row-level security, and a public/publish workflow. The initial frontend-to-Supabase connection is committed. Remaining work includes testing the live REST connection, moderator-only review actions, and abuse controls.
 
 ## Definition of MVP complete
 
