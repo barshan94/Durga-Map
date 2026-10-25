@@ -113,7 +113,8 @@ function persistRecords(){
     return true;
   }catch(e){console.warn('Could not persist location records',e);return false}
 }
-// A publishable key belongs in apikey. Do not send it as a Bearer JWT; that can make REST writes fail.\nconst SUPABASE_HEADERS={'apikey':SUPABASE_PUBLISHABLE_KEY,'Content-Type':'application/json'};
+// A publishable key belongs in apikey. Do not send it as a Bearer JWT; that can make REST writes fail.
+const SUPABASE_HEADERS={'apikey':SUPABASE_PUBLISHABLE_KEY,'Content-Type':'application/json'};
 async function loadPublicLocations(){
   try{
     const res=await fetch(SUPABASE_URL+'/rest/v1/puja_locations?select=id,name,latitude,longitude,description&order=name.asc',{headers:SUPABASE_HEADERS});
@@ -421,10 +422,10 @@ $('mApply').onclick=async()=>{
   optimizedRoute=[];render();
   const saved=persistRecords();
   if(!saved){$('mStatus').textContent='Could not save on this device. Check browser/app storage settings.';return}
-  if(!r.pandalName){$('mStatus').textContent='Saved on this device. Add a pandal name to publish publicly.';return}
-  $('mStatus').textContent='Saved on this device. Publishing location…';
-  if(await publishLocation(r)){persistRecords();await loadPublicLocations();$('mStatus').textContent='Saved on this device and published publicly: '+r.pandalName}
-  else $('mStatus').textContent='Saved on this device, but public sharing failed. You can retry after checking the connection.'
+  if(!r.pandalName){$('mStatus').textContent='Not saved permanently. Enter a pandal name to save this location to the shared database.';return}
+  $('mStatus').textContent='Saving to the shared database…';
+  if(await publishLocation(r)){persistRecords();await loadPublicLocations();$('mStatus').textContent='Saved permanently and shared with all users: '+r.pandalName}
+  else $('mStatus').textContent='CLOUD SAVE FAILED. This location is only a temporary device draft and is not shared. Please retry; do not rely on it being saved.'
 };
 $('mConfirm').onclick=async()=>{
   const r=records[selectedRecordIndex];if(!r)return;
@@ -433,10 +434,10 @@ $('mConfirm').onclick=async()=>{
   render();
   const saved=persistRecords();
   if(!saved){$('mStatus').textContent='Could not save on this device. Check browser/app storage settings.';return}
-  if(!r.pandalName){$('mStatus').textContent='Confirmed on this device. Add a pandal name to publish publicly.';return}
-  $('mStatus').textContent='Confirmed and saved on this device. Publishing location…';
-  if(await publishLocation(r)){persistRecords();await loadPublicLocations();$('mStatus').textContent='Saved on this device and published publicly: '+r.pandalName}
-  else $('mStatus').textContent='Saved on this device, but public sharing failed. You can retry after checking the connection.'
+  if(!r.pandalName){$('mStatus').textContent='Not saved permanently. Enter a pandal name to save this location to the shared database.';return}
+  $('mStatus').textContent='Saving to the shared database…';
+  if(await publishLocation(r)){persistRecords();await loadPublicLocations();$('mStatus').textContent='Saved permanently and shared with all users: '+r.pandalName}
+  else $('mStatus').textContent='CLOUD SAVE FAILED. This location is only a temporary device draft and is not shared. Please retry; do not rely on it being saved.'
 };
 $('mConfirmAll').onclick=()=>{
   const gps=records.filter(r=>validPair(r.lat,r.lon)&&r.pandalName&&!r.isPublic);
