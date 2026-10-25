@@ -40,14 +40,14 @@ th,td{text-align:left;padding:9px 11px;border-bottom:1px solid var(--line);font-
   <button type="button" data-page="page-import">Import photos</button>
   <button type="button" data-page="page-journey">My Puja Journey</button>
   <button type="button" data-page="page-route">Visiting route</button>
-  <button type="button" data-page="page-account">Sign in</button>
+  <button type="button" data-page="page-account" id="accountNavLabel">Sign in</button>
 </nav>
 
 <section id="page-import" class="page-view">
 <div class="grid">
 <section class="panel">
 <h2>1 · Import</h2>
-<div class="muted">Choose photo files using this single option. Select multiple photos together if needed. Photos are processed on this device and never uploaded.</div>
+<div class="muted">Choose one or more photos. Durga Map reads their GPS on this device, then automatically looks for place-name suggestions where names are missing. Photos are never uploaded.</div>
 <div class="row">
 <label class="btn primary" for="files">Choose files (keep GPS)</label>
 <input id="files" type="file" accept="image/*,.json" multiple>
@@ -58,11 +58,10 @@ th,td{text-align:left;padding:9px 11px;border-bottom:1px solid var(--line);font-
 
 <section class="panel">
 <h2>2 · Review locations</h2>
-<p class="muted">Select a photo to review its GPS. If the name is blank, we will try to suggest a nearby place name from map data. Check the suggestion before publishing. Photos stay on this device.</p>
+<p class="muted">Import your photos once. GPS is detected automatically, and we’ll fill in a nearby place-name suggestion when map data has one. Please review names before sharing; photos stay on this device.</p>
 <select id="mPhoto" disabled><option>Import photos first</option></select>
 <label class="muted" for="mPandalName">Pandal name (optional)</label>
-<input id="mPandalName" type="text" maxlength="160" style="margin-top:4px" placeholder="Suggested automatically when available">
-<a id="googleMapPlace" class="map-link" href="https://maps.google.com/" target="_blank" rel="noopener">Open location in Google Maps</a>
+<input id="mPandalName" type="text" maxlength="160" style="margin-top:4px" placeholder="Auto-suggested place name (editable)">
 <label class="muted" for="mCoord" style="display:block;margin-top:10px">GPS coordinates</label>
 <input id="mCoord" type="text" style="margin-top:4px" placeholder="23.615944, 90.503167 or 23°36'57.4&quot;N 90°30'11.4&quot;E">
 <div class="row"><button id="mApply" class="primary" disabled>Save this location</button><button id="mConfirm" disabled>Confirm this location</button><button id="mClear" disabled>Remove GPS</button><button id="mSaveAll" disabled>Save all GPS locations</button></div>
@@ -110,7 +109,7 @@ th,td{text-align:left;padding:9px 11px;border-bottom:1px solid var(--line);font-
 <section class="panel" style="margin-top:0" aria-labelledby="journeyHeading">
   <h2 id="journeyHeading">My Puja Journey</h2>
   <p class="muted page-intro">Choose the mandaps you want to visit. Use the Visiting route tab when you are ready to plan your stops.</p>
-  <div class="row" style="margin:0 0 10px"><button type="button" data-page="page-route">Plan visiting route</button><button type="button" data-page="page-account">Sign in to sync</button></div>
+  <div class="row" style="margin:0 0 10px"><button type="button" data-page="page-route">Plan visiting route</button><button type="button" data-page="page-account" id="journeyAccountLink">Sign in to sync</button></div>
   <p class="muted">Find public mandaps within 5 km of you. Use the map to see where they are, select places one by one or select all, and mark your visit status. Sign in is only needed to save private visit choices.</p>
   <div class="row">
     <button id="findNearby" class="primary" type="button">Find nearby mandaps</button>
@@ -271,7 +270,12 @@ function updateAccountUI(){
   $('signUp').style.display=signedIn?'none':'inline-block';
   $('signIn').style.display=signedIn?'none':'inline-block';
   $('signOut').style.display=signedIn?'inline-block':'none';
-  if(signedIn)setAccountStatus('Signed in as '+(authSession.user.email||'your account')+'. Your personal visit history syncs with Supabase.');
+  const accountLabel=$('accountNavLabel');
+  if(accountLabel)accountLabel.textContent=signedIn?'Account':'Sign in';
+  const journeyLink=$('journeyAccountLink');
+  if(journeyLink)journeyLink.textContent=signedIn?'Manage account':'Sign in to sync';
+  $('accountHeading').textContent=signedIn?'Your account':'Sign in or create an account';
+  if(signedIn)setAccountStatus('Signed in as '+(authSession.user.email||'your account')+'. Your private Puja journey is syncing.');
 }
 async function loadVisitHistory(){
   const session=await getValidSession();
@@ -865,7 +869,8 @@ async function handle(list){
   render();
   if(photos.length)selectRecord(firstImportedIndex);
   const g=records.filter(r=>validPair(r.lat,r.lon)).length;
-  setStatus(g?`Done. ${g} of ${records.length} photo(s) have GPS.`:'No GPS found in any selected file. See the note in the table.',!g);
+  setStatus(g?`Done. ${g} of ${records.length} photo(s) have GPS. Place names are being suggested automatically where possible.`:'No GPS found in any selected file. See the note in the table.',!g);
+  if(g)void autoSuggestMissingPlaceNames();
 }
 
 function uniquePujaLocations(){
@@ -887,31 +892,46 @@ function selectRecord(index){
   $('mCoord').value=validPair(r.lat,r.lon)?r.lat.toFixed(6)+', '+r.lon.toFixed(6):'';
   $('mPandalName').value=r.pandalName||'';
   $('mStatus').textContent='Reviewing '+(r.pandalName||r.name)+(r.confirmed?' · confirmed':' · needs review')+'.';
-  const google=$('googleMapPlace');
-  if(google)google.href=validPair(r.lat,r.lon)?'https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(r.lat+','+r.lon):'https://maps.google.com/';
-  if(validPair(r.lat,r.lon)&&!String(r.pandalName||'').trim())suggestPlaceName(r,index);
+  if(validPair(r.lat,r.lon)&&!String(r.pandalName||'').trim()&&!placeNameLookupCache.has(placeKey(r)))$('mStatus').textContent='Looking for a nearby place-name suggestion automatically…';
 }
-async function suggestPlaceName(record,index){
-  if(!validPair(record.lat,record.lon)||String(record.pandalName||'').trim())return;
-  const token=++placeLookupToken;
-  $('mStatus').textContent='Trying to identify this location from map data…';
-  try{
-    const url='https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat='+encodeURIComponent(record.lat)+'&lon='+encodeURIComponent(record.lon)+'&zoom=18&addressdetails=1';
-    const response=await fetch(url,{headers:{Accept:'application/json'}});
-    if(!response.ok)throw new Error('Map lookup unavailable');
-    const data=await response.json();
-    if(token!==placeLookupToken||selectedRecordIndex!==index||String($('mPandalName').value||'').trim())return;
-    const address=data.address||{};
-    const suggestion=String(data.name||address.amenity||address.building||address.place||address.tourism||address.historic||address.man_made||address.leisure||address.shop||address.village||address.suburb||address.neighbourhood||'').trim();
-    if(suggestion){
-      $('mPandalName').value=suggestion;
-      record.mapNameSuggestion=suggestion;
-      $('mStatus').textContent='Map suggestion: “'+suggestion+'”. Please verify it is the correct pandal before saving.';
-    }else{
-      $('mStatus').textContent='No place name was available for these coordinates. You can enter a name or open Google Maps to check.';
+const placeNameLookupCache=new Map();
+function placeKey(record){return Number(record.lat).toFixed(5)+','+Number(record.lon).toFixed(5)}
+async function autoSuggestMissingPlaceNames(){
+  for(let i=0;i<records.length;i++){
+    const record=records[i];
+    if(!validPair(record.lat,record.lon)||String(record.pandalName||'').trim())continue;
+    const key=placeKey(record);
+    if(placeNameLookupCache.has(key)){
+      const cached=placeNameLookupCache.get(key);
+      if(cached&&!String(record.pandalName||'').trim())record.pandalName=record.name=cached;
+      continue;
     }
-  }catch{
-    if(token===placeLookupToken&&selectedRecordIndex===index)$('mStatus').textContent='Automatic place-name lookup was unavailable. You can enter a name or open Google Maps to check.';
+    // Respect the public reverse-geocoding service's rate limit: one request at a time.
+    try{
+      const url='https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat='+encodeURIComponent(record.lat)+'&lon='+encodeURIComponent(record.lon)+'&zoom=18&addressdetails=1';
+      const response=await fetch(url,{headers:{Accept:'application/json'}});
+      if(!response.ok)throw new Error('Map lookup unavailable');
+      const data=await response.json(),address=data.address||{};
+      const suggestion=String(data.name||address.amenity||address.building||address.tourism||address.historic||address.man_made||address.leisure||address.shop||address.place||address.village||address.suburb||address.neighbourhood||'').trim();
+      placeNameLookupCache.set(key,suggestion||null);
+      if(suggestion&&!String(record.pandalName||'').trim()){
+        record.pandalName=suggestion;
+        record.name=suggestion;
+        record.mapNameSuggestion=suggestion;
+        persistRecords();
+        render();
+        if(selectedRecordIndex===i&&!String($('mPandalName').value||'').trim()){
+          $('mPandalName').value=suggestion;
+          $('mStatus').textContent='Suggested place name: “'+suggestion+'”. Please check it is the correct pandal before sharing.';
+        }
+      }else if(selectedRecordIndex===i&&!String($('mPandalName').value||'').trim()){
+        $('mStatus').textContent='No nearby named place was found. You can leave the name blank or enter one yourself.';
+      }
+    }catch{
+      placeNameLookupCache.set(key,null);
+      if(selectedRecordIndex===i&&!String($('mPandalName').value||'').trim())$('mStatus').textContent='Automatic name lookup is temporarily unavailable. You can still save the GPS location without a name.';
+    }
+    await new Promise(resolve=>setTimeout(resolve,1100));
   }
 }
 function render(){
