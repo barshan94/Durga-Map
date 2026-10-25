@@ -472,7 +472,8 @@ async function markSelectedMandaps(visited){
       setVisitStatus('Saving '+(i+1)+' of '+selected.length+' mandaps…');
       try{
         if(visited){
-          const alreadyRecorded=visitRecords.some(v=>v.pandal_id===record.remoteId&&Number(v.puja_year)===year);
+          const previousStatus=pandalStatuses.get(String(record.remoteId));
+          const alreadyRecorded=visitRecords.some(v=>v.pandal_id===record.remoteId&&Number(v.puja_year)===year)&&previousStatus?.visited!==false;
           if(!alreadyRecorded){
             const eventResponse=await fetch(SUPABASE_URL+'/rest/v1/personal_visits?select=id,pandal_id,pandal_name,latitude,longitude,visited_at,puja_year,method',{
               method:'POST',
