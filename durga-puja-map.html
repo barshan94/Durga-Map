@@ -246,17 +246,32 @@ async function authRequest(path,body,token=null){
   if(!response.ok)throw new Error(data.msg||data.message||data.error_description||data.error||raw||('Authentication failed ('+response.status+')'));
   return data;
 }
+async function hydrateSessionUser(session){
+  if(!session?.access_token||session.user)return session;
+  try{
+    const response=await fetch(SUPABASE_URL+'/auth/v1/user',{headers:{...SUPABASE_HEADERS,Authorization:'Bearer '+session.access_token},cache:'no-store'});
+    if(response.ok){
+      session.user=await response.json();
+      localStorage.setItem(AUTH_STORAGE_KEY,JSON.stringify(session));
+    }else if(response.status===401){
+      clearAuthSession();
+      return null;
+    }
+  }catch(e){console.warn('Could not restore account profile:',e)}
+  return session;
+}
 async function getValidSession(){
   if(!authSession){
     try{authSession=JSON.parse(localStorage.getItem(AUTH_STORAGE_KEY)||'null')}catch{authSession=null}
   }
   if(!authSession?.access_token)return null;
-  if(authSession.expires_at>Date.now()+60000)return authSession;
+  if(authSession.expires_at>Date.now()+60000)return await hydrateSessionUser(authSession);
   if(!authSession.refresh_token){clearAuthSession();return null}
   try{
-    const refreshed=await authRequest('/auth/v1/token?grant_type=refresh_token',{refresh_token:authSession.refresh_token});
-    saveAuthSession(refreshed,authSession);
-    return authSession;
+    const previous=authSession;
+    const refreshed=await authRequest('/auth/v1/token?grant_type=refresh_token',{refresh_token:previous.refresh_token});
+    saveAuthSession(refreshed,previous);
+    return await hydrateSessionUser(authSession);
   }catch(e){
     if(/invalid refresh token|refresh token not found|session.*not found/i.test(e.message)){
       clearAuthSession();return null;
@@ -900,6 +915,7 @@ async function autoSuggestMissingPlaceNames(){
   for(let i=0;i<records.length;i++){
     const record=records[i];
     if(!validPair(record.lat,record.lon)||String(record.pandalName||'').trim())continue;
+    if(selectedRecordIndex===i&&String($('mPandalName').value||'').trim())continue;
     const key=placeKey(record);
     if(placeNameLookupCache.has(key)){
       const cached=placeNameLookupCache.get(key);
