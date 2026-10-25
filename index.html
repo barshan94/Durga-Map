@@ -727,8 +727,6 @@ function initMap(){
     if(!r)return;
     $('mCoord').value=e.latlng.lat.toFixed(6)+', '+e.latlng.lng.toFixed(6);
     $('mStatus').textContent='Coordinates filled from map for '+(r.pandalName||r.name)+'. Tap “Save this location” to publish it.';
-    const google=$('googleMapPlace');
-    if(google)google.href='https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(e.latlng.lat+','+e.latlng.lng);
   });
 }
 
