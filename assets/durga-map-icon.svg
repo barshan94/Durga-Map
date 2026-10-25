@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+<defs>
+<linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#5C1A1A"/><stop offset="100%" stop-color="#2D0A0A"/></linearGradient>
+<linearGradient id="gold" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#FFE082"/><stop offset="40%" stop-color="#F5C518"/><stop offset="100%" stop-color="#D4A017"/></linearGradient>
+<radialGradient id="halo" cx="0.5" cy="0.42" r="0.38"><stop offset="0%" stop-color="#8B3A2A" stop-opacity="0.75"/><stop offset="100%" stop-color="#5C1A1A" stop-opacity="0"/></radialGradient>
+</defs>
+<rect width="1024" height="1024" rx="224" ry="224" fill="url(#bg)"/>
+<circle cx="512" cy="430" r="240" fill="url(#halo)"/>
+<path d="M512,172 Q498,240 462,328 L562,328 Q526,240 512,172Z" fill="url(#gold)"/>
+<path d="M405,238 Q394,278 368,328 L442,328 Q416,278 405,238Z" fill="url(#gold)"/>
+<path d="M619,238 Q608,278 582,328 L656,328 Q630,278 619,238Z" fill="url(#gold)"/>
+<rect x="352" y="316" width="320" height="44" rx="14" ry="14" fill="url(#gold)"/>
+<circle cx="512" cy="188" r="15" fill="#D93025"/><circle cx="405" cy="250" r="11" fill="#D93025"/><circle cx="619" cy="250" r="11" fill="#D93025"/>
+<circle cx="440" cy="338" r="8" fill="#D93025"/><circle cx="512" cy="338" r="9" fill="#D93025"/><circle cx="584" cy="338" r="8" fill="#D93025"/>
+<ellipse cx="512" cy="488" rx="132" ry="152" fill="url(#gold)"/>
+<path d="M442,452 Q462,432 486,452 Q462,462 442,452Z" fill="#2D0A0A"/><path d="M538,452 Q558,432 582,452 Q558,462 538,452Z" fill="#2D0A0A"/>
+<circle cx="512" cy="408" r="13" fill="#D93025"/>
+<path d="M512,472 Q507,490 510,498 Q512,500 514,498 Q517,490 512,472Z" fill="#C8960F" opacity="0.55"/>
+<path d="M490,528 Q500,520 512,523 Q524,520 534,528 Q524,537 512,535 Q500,537 490,528Z" fill="#D93025"/>
+<path d="M456,624 C454,668 472,730 494,778 Q504,802 512,822 Q520,802 530,778 C552,730 570,668 568,624Z" fill="url(#gold)"/>
+<circle cx="512" cy="828" r="9" fill="#D93025"/>
+</svg>
