@@ -37,12 +37,10 @@ th,td{text-align:left;padding:9px 11px;border-bottom:1px solid var(--line);font-
 <div class="grid">
 <section class="panel">
 <h2>1 · Import</h2>
-<div class="muted">Choose original photo files to preserve GPS, or select a whole folder. Photos are processed on this device and never uploaded.</div>
+<div class="muted">Choose photo files using this single option. Select multiple photos together if needed. Photos are processed on this device and never uploaded.</div>
 <div class="row">
 <label class="btn primary" for="files">Choose files (keep GPS)</label>
-<input id="files" type="file" multiple>
-<label class="btn" for="folder">Select whole folder</label>
-<input id="folder" type="file" webkitdirectory multiple>
+<input id="files" type="file" accept="image/*,.json" multiple>
 </div>
 <div class="stats"><div class="stat"><b id="nTotal">0</b><span class="muted">Photos scanned</span></div><div class="stat"><b id="nGps">0</b><span class="muted">Locations found</span></div><div class="stat"><b id="nPandal">0</b><span class="muted">Named pandals</span></div></div>
 <div id="status">Waiting for photos.</div>
@@ -104,9 +102,16 @@ function loadSavedRecords(){
 let records=loadSavedRecords(),sidecars=new Map(),map,layer,routeLayer,exifr=null,optimizedRoute=[],selectedRecordIndex=0;
 function persistRecords(){
   try{
-    const locations=records.filter(r=>!r.isPublic&&validPair(r.lat,r.lon)&&(r.pandalName||'').trim()).map(r=>({name:r.pandalName.trim(),pandalName:r.pandalName.trim(),lat:r.lat,lon:r.lon,confirmed:!!r.confirmed}));
+    const locations=[];
+    for(const r of records){
+      const name=(r.pandalName||'').trim();
+      if(!name||!validPair(r.lat,r.lon))continue;
+      const duplicate=locations.some(x=>x.name.toLowerCase()===name.toLowerCase()&&Math.abs(x.lat-r.lat)<0.0003&&Math.abs(x.lon-r.lon)<0.0003);
+      if(!duplicate)locations.push({name,pandalName:name,lat:r.lat,lon:r.lon,confirmed:!!r.confirmed,isPublic:!!r.isPublic,remoteId:r.remoteId||null});
+    }
     localStorage.setItem('durgaMap.locations.v2',JSON.stringify(locations));
-  }catch(e){console.warn('Could not persist location records',e)}
+    return true;
+  }catch(e){console.warn('Could not persist location records',e);return false}
 }
 const SUPABASE_HEADERS={'apikey':SUPABASE_PUBLISHABLE_KEY,'Authorization':'Bearer '+SUPABASE_PUBLISHABLE_KEY,'Content-Type':'application/json'};
 async function loadPublicLocations(){
@@ -114,10 +119,20 @@ async function loadPublicLocations(){
     const res=await fetch(SUPABASE_URL+'/rest/v1/puja_locations?select=id,name,latitude,longitude,description&order=name.asc',{headers:SUPABASE_HEADERS});
     if(!res.ok)throw new Error('Public locations request failed ('+res.status+')');
     const rows=await res.json();
-    const remote=rows.map(p=>({name:p.name,pandalName:p.name,lat:Number(p.latitude),lon:Number(p.longitude),confirmed:true,file:null,remoteId:p.id,isPublic:true,src:'Community map'}));
-    records=records.filter(r=>!r.isPublic).concat(remote);render();
-    setStatus('Loaded '+remote.length+' public Puja location(s). Photo files are not uploaded or saved.');
-  }catch(e){console.warn('Could not load public Puja locations',e);setStatus('Could not load shared locations. Check your internet connection.',true)}
+    for(const p of rows){
+      const lat=Number(p.latitude),lon=Number(p.longitude),name=String(p.name||'').trim();
+      if(!name||!validPair(lat,lon))continue;
+      const existing=records.find(r=>(r.pandalName||r.name||'').trim().toLowerCase()===name.toLowerCase()&&validPair(r.lat,r.lon)&&Math.abs(r.lat-lat)<0.0003&&Math.abs(r.lon-lon)<0.0003);
+      if(existing){
+        existing.name=name;existing.pandalName=name;existing.lat=lat;existing.lon=lon;
+        existing.confirmed=true;existing.remoteId=p.id;existing.isPublic=true;existing.src=existing.src||'Community map';
+      }else{
+        records.push({name,pandalName:name,lat,lon,confirmed:true,file:null,remoteId:p.id,isPublic:true,src:'Community map'});
+      }
+    }
+    render();
+    setStatus('Loaded '+rows.length+' public Puja location(s). Photo files are not uploaded or saved.');
+  }catch(e){console.warn('Could not load public Puja locations',e);setStatus('Could not load shared locations. Saved device locations remain available.',true)}
 }
 async function publishLocation(r){
   if(!r||!validPair(r.lat,r.lon)||!(r.pandalName||'').trim())return false;
@@ -294,6 +309,7 @@ function applySidecar(rec){
 async function handle(list){
   const files=[...list];if(!files.length)return;
   const jsons=files.filter(f=>/\.json$/i.test(f.name)),photos=files.filter(f=>!/\.json$/i.test(f.name));
+  const firstImportedIndex=records.length;
   setStatus('Reading '+files.length+' file(s)…');
   for(const j of jsons){
     try{
@@ -309,6 +325,7 @@ async function handle(list){
     else if(!r.note)r.note='['+(r.dbg||'')+'] No GPS inside this file. If exiftool shows GPS for the original, this copy was stripped by the picker — re-select it with "Choose files (keeps GPS)".';
   });
   render();
+  if(photos.length)selectRecord(firstImportedIndex);
   const g=records.filter(r=>validPair(r.lat,r.lon)).length;
   setStatus(g?`Done. ${g} of ${records.length} photo(s) have GPS.`:'No GPS found in any selected file. See the note in the table.',!g);
 }
@@ -401,17 +418,25 @@ $('mApply').onclick=async()=>{
   if(!validPair(a,b)){$('mStatus').textContent='Could not read those coordinates.';return}
   const r=records[selectedRecordIndex];if(!r)return;
   r.lat=a;r.lon=b;r.pandalName=$('mPandalName').value.trim();r.name=r.pandalName||r.name||'Saved location';r.confirmed=true;
-  optimizedRoute=[];render();persistRecords();
-  if(!r.pandalName){$('mStatus').textContent='Saved locally. Add a pandal name to publish publicly.';return}
-  if(await publishLocation(r)){await loadPublicLocations();$('mStatus').textContent='Published publicly: '+r.pandalName}
+  optimizedRoute=[];render();
+  const saved=persistRecords();
+  if(!saved){$('mStatus').textContent='Could not save on this device. Check browser/app storage settings.';return}
+  if(!r.pandalName){$('mStatus').textContent='Saved on this device. Add a pandal name to publish publicly.';return}
+  $('mStatus').textContent='Saved on this device. Publishing location…';
+  if(await publishLocation(r)){persistRecords();await loadPublicLocations();$('mStatus').textContent='Saved on this device and published publicly: '+r.pandalName}
+  else $('mStatus').textContent='Saved on this device, but public sharing failed. You can retry after checking the connection.'
 };
 $('mConfirm').onclick=async()=>{
   const r=records[selectedRecordIndex];if(!r)return;
   if(!validPair(r.lat,r.lon)){$('mStatus').textContent='This record has no valid GPS coordinates to confirm.';return}
   r.pandalName=$('mPandalName').value.trim();r.name=r.pandalName||r.name||'Saved location';r.confirmed=true;
-  render();persistRecords();
-  if(!r.pandalName){$('mStatus').textContent='Confirmed locally. Add a pandal name to publish publicly.';return}
-  if(await publishLocation(r)){await loadPublicLocations();$('mStatus').textContent='Published publicly: '+r.pandalName}
+  render();
+  const saved=persistRecords();
+  if(!saved){$('mStatus').textContent='Could not save on this device. Check browser/app storage settings.';return}
+  if(!r.pandalName){$('mStatus').textContent='Confirmed on this device. Add a pandal name to publish publicly.';return}
+  $('mStatus').textContent='Confirmed and saved on this device. Publishing location…';
+  if(await publishLocation(r)){persistRecords();await loadPublicLocations();$('mStatus').textContent='Saved on this device and published publicly: '+r.pandalName}
+  else $('mStatus').textContent='Saved on this device, but public sharing failed. You can retry after checking the connection.'
 };
 $('mConfirmAll').onclick=()=>{
   const gps=records.filter(r=>validPair(r.lat,r.lon)&&r.pandalName&&!r.isPublic);
@@ -430,7 +455,7 @@ $('csv').onclick=()=>{const d=clean();if(!d.length)return;const h=Object.keys(d[
 $('json').onclick=()=>download('puja-locations.json',JSON.stringify(clean(),null,2),'application/json');
 $('clear').onclick=()=>{records=records.filter(r=>r.isPublic);sidecars.clear();optimizedRoute=[];selectedRecordIndex=0;routeLayer?.clearLayers();render();persistRecords();setStatus('Cleared local location data. Shared public locations remain available.')};
 $('q').oninput=render;
-for(const id of ['files','folder'])$(id).onchange=async e=>{await handle(e.target.files);optimizedRoute=[];e.target.value=''};
+$('files').onchange=async e=>{await handle(e.target.files);optimizedRoute=[];e.target.value=''};
 $('mPhoto').addEventListener('change',()=>{
   const index=Number($('mPhoto').value);
   if(!Number.isInteger(index)||!records[index])return;
