@@ -253,7 +253,7 @@ jobs:
             fs.mkdirSync(drawable, {recursive:true});
             fs.writeFileSync(path.join(drawable, 'durga_launcher_foreground.png'), await sharp(master).resize(432,432).png().toBuffer());
             // Remove Capacitor's default Android robot vector so it cannot override the custom PNG.
-            for (const base of ['drawable', 'drawable-anydpi', 'drawable-anydpi-v24', 'drawable-nodpi']) {
+            for (const base of ['drawable', 'drawable-anydpi', 'drawable-anydpi-v24', 'drawable-v24', 'drawable-nodpi']) {
               const vector = path.join(root, base, 'ic_launcher_foreground.xml');
               if (fs.existsSync(vector)) fs.unlinkSync(vector);
             }
