@@ -87,30 +87,45 @@ th,td{text-align:left;padding:9px 11px;border-bottom:1px solid var(--line);font-
 
 <section class="panel" style="margin-top:14px" aria-labelledby="journeyHeading">
   <h2 id="journeyHeading">5 · My Puja journey</h2>
-  <p class="muted">Find nearby mapped mandaps, then confirm your visit. Only your confirmed visit events are saved to your account; the app does not continuously track your movement.</p>
-  <div class="stats">
-    <div class="stat journey-stat"><b id="visitsThisYear">0</b><span class="muted">Unique this year</span></div>
-    <div class="stat journey-stat"><b id="visitsAllTime">0</b><span class="muted">All-time unique</span></div>
-    <div class="stat journey-stat"><b id="visitsRepeat">0</b><span class="muted">Repeat visits</span></div>
-  </div>
+  <p class="muted">Find public mandaps within 5 km of you. Select places one by one or select all, then mark them visited or not visited. Your choices are private and sync to your account.</p>
   <div class="row">
     <button id="findNearby" class="primary" type="button">Find nearby mandaps</button>
-    <button id="markSelectedVisited" type="button" disabled>Mark selected mandap visited</button>
+    <label class="row" style="align-items:center;margin:0;gap:7px;padding:8px 4px"><input id="selectAllNearby" type="checkbox" style="width:auto"> Select all nearby</label>
   </div>
-  <div id="visitStatus" class="muted visit-status" aria-live="polite">Sign in to sync your personal visit history.</div>
-  <div id="nearbyList" class="review-list" aria-live="polite"></div>
-  <h3 style="font-size:15px;margin:16px 0 4px">Visit history</h3>
-  <div id="visitHistory" class="muted">Sign in to view your saved visits across years.</div>
+  <div class="row">
+    <button id="markSelectedVisited" type="button" disabled>Mark selected visited</button>
+    <button id="markSelectedNotVisited" type="button" disabled>Mark selected not visited</button>
+  </div>
+  <div id="visitStatus" class="muted visit-status" aria-live="polite">Sign in to sync your private visit choices.</div>
+  <div id="nearbyList" class="review-list" aria-live="polite"><p class="muted">Tap Find nearby mandaps to get started.</p></div>
+  <details style="margin-top:12px">
+    <summary style="cursor:pointer;font-weight:650">My saved visit history</summary>
+    <div class="stats">
+      <div class="stat journey-stat"><b id="visitsThisYear">0</b><span class="muted">Unique this year</span></div>
+      <div class="stat journey-stat"><b id="visitsAllTime">0</b><span class="muted">All-time unique</span></div>
+      <div class="stat journey-stat"><b id="visitsRepeat">0</b><span class="muted">Repeat visits</span></div>
+    </div>
+    <div id="visitHistory" class="muted" style="margin-top:8px">Sign in to view your saved visits across years.</div>
+  </details>
 </section>
 
 <section class="panel" style="margin-top:14px" aria-labelledby="routeHeading">
   <h2 id="routeHeading">6 · Shortest visiting route</h2>
-  <p class="muted">Builds an efficient stop order from your GPS locations. The order is optimized by geographic distance; your navigation app will calculate actual road directions and travel times.</p>
+  <p class="muted">Select the pandals you want to cover above. Choose your starting point, then the app will order the selected stops by shortest straight-line distance and show the route on the map.</p>
+  <label for="routeStartMode" class="muted">Start route from</label>
+  <select id="routeStartMode" style="margin-top:4px">
+    <option value="gps">My current GPS location</option>
+    <option value="mandap">A mandap I choose</option>
+  </select>
+  <div id="routeStartMandapWrap" style="display:none;margin-top:8px">
+    <label for="routeStartMandap" class="muted">Choose starting mandap</label>
+    <select id="routeStartMandap" style="margin-top:4px"></select>
+  </div>
   <div class="row">
-    <button id="planRoute" class="primary" type="button" disabled>Plan visiting route</button>
+    <button id="planRoute" class="primary" type="button" disabled>Find shortest route</button>
     <button id="openRoute" type="button" disabled>Open route in Google Maps</button>
   </div>
-  <div id="routeSummary" class="muted" style="margin-top:10px">Import photos with GPS to plan a route.</div>
+  <div id="routeSummary" class="muted" style="margin-top:10px">Select pandals above to plan your route.</div>
   <ol id="routeStops" style="padding-left:24px"></ol>
 </section>
 
@@ -136,6 +151,7 @@ function loadSavedRecords(){
   }catch{return []}
 }
 let records=loadSavedRecords(),sidecars=new Map(),map,layer,routeLayer,exifr=null,optimizedRoute=[],selectedRecordIndex=0;
+let nearbyMandaps=[],selectedPandalIds=new Set(),pandalStatuses=new Map();
 function persistRecords(){
   try{
     const locations=[];
@@ -241,6 +257,9 @@ function renderVisitHistory(){
   const year=new Date().getFullYear();
   const thisYear=visitRecords.filter(v=>Number(v.puja_year)===year);
   const uniqueThisYear=new Set(thisYear.map(visitKey));
+  for(const [id,status] of pandalStatuses){
+    if(status.visited)uniqueThisYear.add(id);else uniqueThisYear.delete(id);
+  }
   const uniqueAll=new Set(visitRecords.map(visitKey));
   $('visitsThisYear').textContent=uniqueThisYear.size;
   $('visitsAllTime').textContent=uniqueAll.size;
@@ -267,6 +286,7 @@ async function initAccount(){
     if(session){
       updateAccountUI();
       await loadVisitHistory();
+      await loadPandalStatuses();
       setVisitStatus('Your visit history is synced. Find nearby mandaps when you are ready.');
     }else{
       updateAccountUI();
@@ -286,7 +306,7 @@ async function signUp(){
     if(data.access_token&&data.refresh_token){
       saveAuthSession(data);updateAccountUI();
       setAccountStatus('Account created and signed in. Your Puja journey is ready.');
-      try{await loadVisitHistory();setVisitStatus('Your visit history is synced. Find nearby mandaps when you are ready.')}catch(e){setVisitStatus('Signed in, but visit history could not load: '+e.message,true)}
+      try{await loadVisitHistory();await loadPandalStatuses();setVisitStatus('Your visit history is synced. Find nearby mandaps when you are ready.')}catch(e){setVisitStatus('Signed in, but visit history could not load: '+e.message,true)}
     }else{
       setAccountStatus('Account created. Check your email for the confirmation link, then return here and sign in.');
     }
@@ -301,7 +321,7 @@ async function signIn(){
     const data=await authRequest('/auth/v1/token?grant_type=password',{email,password});
     saveAuthSession(data);updateAccountUI();
     setAccountStatus('Signed in successfully.');
-    try{await loadVisitHistory();setVisitStatus('Signed in. Your personal visit history is synced across devices.')}catch(e){setVisitStatus('Signed in, but visit history could not load: '+e.message,true)}
+    try{await loadVisitHistory();await loadPandalStatuses();setVisitStatus('Signed in. Your personal visit choices are synced across devices.')}catch(e){setVisitStatus('Signed in, but visit history could not load: '+e.message,true)}
   }catch(e){setAccountStatus('Could not sign in: '+e.message,true)}
   finally{$('signIn').disabled=false}
 }
@@ -311,8 +331,10 @@ async function signOut(){
     if(session)await authRequest('/auth/v1/logout',{},session.access_token);
   }catch(e){console.warn('Server sign-out did not complete:',e)}
   clearAuthSession();
+  pandalStatuses.clear();
+  renderNearbyList();
   setAccountStatus('Signed out. Your cloud visit history remains saved to your account.');
-  setVisitStatus('Sign in to view or add to your personal visit history.');
+  setVisitStatus('Sign in to sync your private visit choices.');
 }
 let savingVisit=false;
 async function saveVisit(r,method='manual'){
@@ -366,6 +388,119 @@ async function getCurrentVisitPosition(){
     enableHighAccuracy:true,maximumAge:10000,timeout:20000
   }));
 }
+async function loadPandalStatuses(){
+  const session=await getValidSession();
+  if(!session){pandalStatuses.clear();renderNearbyList();renderVisitHistory();return}
+  const year=new Date().getFullYear();
+  const response=await fetch(SUPABASE_URL+'/rest/v1/personal_pandal_status?select=pandal_id,visited,puja_year,updated_at&puja_year=eq.'+year+'&order=updated_at.desc',{
+    headers:{...SUPABASE_HEADERS,Authorization:'Bearer '+session.access_token},
+    cache:'no-store'
+  });
+  if(!response.ok)throw new Error('Could not load visit choices ('+response.status+'): '+(await response.text()).slice(0,180));
+  const rows=await response.json();
+  pandalStatuses=new Map(rows.map(row=>[row.pandal_id,{visited:!!row.visited,updatedAt:row.updated_at}]));
+  renderNearbyList();
+  renderVisitHistory();
+}
+async function setPandalStatus(session,record,visited,year){
+  const response=await fetch(SUPABASE_URL+'/rest/v1/personal_pandal_status?on_conflict=user_id,pandal_id,puja_year',{
+    method:'POST',
+    headers:{...SUPABASE_HEADERS,Authorization:'Bearer '+session.access_token,Prefer:'resolution=merge-duplicates,return=representation'},
+    body:JSON.stringify({user_id:session.user.id,pandal_id:record.remoteId,puja_year:year,visited,updated_at:new Date().toISOString()}),
+    cache:'no-store'
+  });
+  const raw=await response.text();let data=[];try{data=raw?JSON.parse(raw):[]}catch{}
+  if(!response.ok)throw new Error(data.message||data.details||raw||('Could not save visit status ('+response.status+')'));
+  if(!Array.isArray(data)||!data[0])throw new Error('The server did not confirm the saved visit status.');
+  pandalStatuses.set(record.remoteId,{visited,updatedAt:data[0].updated_at});
+}
+function renderNearbyList(){
+  const list=$('nearbyList');
+  if(!list)return;
+  if(!nearbyMandaps.length){
+    list.innerHTML='<p class="muted">Tap Find nearby mandaps to see public mandaps within 5 km.</p>';
+  }else{
+    list.innerHTML=nearbyMandaps.map(r=>{
+      const id=String(r.remoteId);
+      const status=pandalStatuses.get(id);
+      const statusText=status?(status.visited?'Visited this year':'Marked not visited'):'Not marked yet';
+      const statusClass=status?.visited?'review-state':'review-meta';
+      return '<label class="nearby-item"><input type="checkbox" data-select-pandal="'+esc(id)+'" '+(selectedPandalIds.has(id)?'checked':'')+' style="width:auto;flex-shrink:0"><div class="nearby-info" style="flex:1"><strong>'+esc(r.pandalName||r.name||'Unnamed mandap')+'</strong><div class="nearby-meta">'+(r.distance>=1000?(r.distance/1000).toFixed(1)+' km away':Math.round(r.distance)+' m away')+' · <span class="'+statusClass+'">'+statusText+'</span></div></div></label>';
+    }).join('');
+  }
+  list.querySelectorAll('[data-select-pandal]').forEach(input=>input.addEventListener('change',()=>{
+    const id=input.dataset.selectPandal;
+    if(input.checked)selectedPandalIds.add(id);else selectedPandalIds.delete(id);
+    updateJourneyControls();
+  }));
+  const selectAll=$('selectAllNearby');
+  if(selectAll){
+    selectAll.checked=nearbyMandaps.length>0&&nearbyMandaps.every(r=>selectedPandalIds.has(String(r.remoteId)));
+    selectAll.indeterminate=nearbyMandaps.some(r=>selectedPandalIds.has(String(r.remoteId)))&&!selectAll.checked;
+  }
+  updateJourneyControls();
+}
+function updateJourneyControls(){
+  const selectedCount=selectedPandalIds.size;
+  $('markSelectedVisited').disabled=!selectedCount||!authSession?.user;
+  $('markSelectedNotVisited').disabled=!selectedCount||!authSession?.user;
+  $('planRoute').disabled=!selectedCount;
+  const mode=$('routeStartMode')?.value||'gps';
+  $('routeStartMandapWrap').style.display=mode==='mandap'?'block':'none';
+  const startSelect=$('routeStartMandap');
+  if(startSelect){
+    const publicRecords=[...new Map(records.filter(r=>r.isPublic&&r.remoteId&&validPair(r.lat,r.lon)).map(r=>[String(r.remoteId),r])).values()];
+    const current=startSelect.value;
+    startSelect.innerHTML=publicRecords.map(r=>'<option value="'+esc(r.remoteId)+'">'+esc(r.pandalName||r.name||'Unnamed mandap')+'</option>').join('');
+    if(publicRecords.some(r=>String(r.remoteId)===current))startSelect.value=current;
+    startSelect.disabled=!publicRecords.length;
+  }
+}
+async function markSelectedMandaps(visited){
+  if(savingVisit)return;
+  const selected=[...new Map(records.filter(r=>r.isPublic&&r.remoteId&&validPair(r.lat,r.lon)&&selectedPandalIds.has(String(r.remoteId))).map(r=>[String(r.remoteId),r])).values()];
+  if(!selected.length){setVisitStatus('Select at least one nearby mandap first.',true);return}
+  let session;
+  try{session=await getValidSession()}catch(e){setVisitStatus('Could not refresh your session: '+e.message,true);return}
+  if(!session){setVisitStatus('Please sign in to save your private visit choices.',true);$('authEmail').focus();return}
+  savingVisit=true;
+  $('markSelectedVisited').disabled=true;$('markSelectedNotVisited').disabled=true;$('findNearby').disabled=true;
+  const year=new Date().getFullYear();let saved=0;const failures=[];
+  try{
+    for(let i=0;i<selected.length;i++){
+      const record=selected[i];
+      setVisitStatus('Saving '+(i+1)+' of '+selected.length+' mandaps…');
+      try{
+        if(visited){
+          const previousStatus=pandalStatuses.get(String(record.remoteId));
+          const alreadyRecorded=visitRecords.some(v=>v.pandal_id===record.remoteId&&Number(v.puja_year)===year)&&previousStatus?.visited!==false;
+          if(!alreadyRecorded){
+            const eventResponse=await fetch(SUPABASE_URL+'/rest/v1/personal_visits?select=id,pandal_id,pandal_name,latitude,longitude,visited_at,puja_year,method',{
+              method:'POST',
+              headers:{...SUPABASE_HEADERS,Authorization:'Bearer '+session.access_token,Prefer:'return=representation'},
+              body:JSON.stringify({user_id:session.user.id,pandal_id:record.remoteId,pandal_name:(record.pandalName||record.name||'Unnamed mandap').trim(),latitude:record.lat,longitude:record.lon,visited_at:new Date().toISOString(),puja_year:year,method:'manual'}),
+              cache:'no-store'
+            });
+            const raw=await eventResponse.text();let data=[];try{data=raw?JSON.parse(raw):[]}catch{}
+            if(!eventResponse.ok||!Array.isArray(data)||!data[0]?.id)throw new Error(data.message||data.details||raw||'Visit event was not confirmed as saved.');
+          }
+        }
+        await setPandalStatus(session,record,visited,year);
+        saved++;
+      }catch(e){failures.push((record.pandalName||record.name||'Mandap')+': '+e.message)}
+    }
+    await loadVisitHistory();
+    renderNearbyList();
+    if(failures.length)setVisitStatus(saved+' of '+selected.length+' mandap(s) saved. Failed: '+failures.slice(0,2).join('; ')+(failures.length>2?'…':''),true);
+    else setVisitStatus(saved+' mandap(s) marked '+(visited?'visited':'not visited')+' and synced to your private account.');
+  }catch(e){
+    setVisitStatus('Could not finish saving visit choices: '+e.message,true);
+  }finally{
+    savingVisit=false;
+    $('findNearby').disabled=false;
+    updateJourneyControls();
+  }
+}
 async function findNearbyMandaps(){
   if(savingVisit)return;
   $('findNearby').disabled=true;
@@ -376,26 +511,21 @@ async function findNearbyMandaps(){
     if(!validPair(here.lat,here.lon))throw new Error('The device returned invalid GPS coordinates.');
     const unique=new Map();
     records.filter(r=>r.isPublic&&r.remoteId&&validPair(r.lat,r.lon)).forEach(r=>{
-      if(!unique.has(r.remoteId))unique.set(r.remoteId,r);
+      if(!unique.has(String(r.remoteId)))unique.set(String(r.remoteId),r);
     });
-    const nearby=[...unique.values()].map(r=>({...r,distance:distanceKm(here,r)*1000}))
-      .filter(r=>r.distance<=250).sort((a,b)=>a.distance-b.distance).slice(0,10);
-    if(position.coords.accuracy>100)setVisitStatus('GPS accuracy is about '+Math.round(position.coords.accuracy)+' m. Move to a clearer area if the nearby results look wrong.');
-    else setVisitStatus('GPS checked. Confirm a visit only when you are actually at the mandap.');
-    $('nearbyList').innerHTML=nearby.length?nearby.map(r=>'<div class="nearby-item"><div class="nearby-info"><strong>'+esc(r.pandalName||r.name||'Unnamed mandap')+'</strong><div class="nearby-meta">'+Math.round(r.distance)+' m away</div></div><button type="button" data-visit-id="'+esc(r.remoteId)+'">Confirm visit</button></div>').join(''):'<p class="muted">No shared mandap found within 250 m. Move closer to a mapped mandap and try again.</p>';
-    $('nearbyList').querySelectorAll('[data-visit-id]').forEach(button=>button.addEventListener('click',()=>{
-      const record=records.find(r=>r.remoteId===button.dataset.visitId&&r.isPublic);
-      if(record)saveVisit(record,'gps');
-    }));
+    nearbyMandaps=[...unique.values()].map(r=>({...r,distance:distanceKm(here,r)*1000}))
+      .filter(r=>r.distance<=5000).sort((a,b)=>a.distance-b.distance).slice(0,30);
+    if(position.coords.accuracy>100)setVisitStatus('GPS accuracy is about '+Math.round(position.coords.accuracy)+' m. Nearby search covers up to 5 km; move to a clearer area if results look wrong.');
+    else setVisitStatus('Found '+nearbyMandaps.length+' public mandap(s) within 5 km. Select the places you visited or want to route through.');
+    renderNearbyList();
   }catch(error){
     const messages={1:'Location permission was denied. Allow location access in Android settings to find nearby mandaps.',2:'Your current location could not be determined. Try again outdoors.',3:'GPS timed out. Please try again.'};
     setVisitStatus(messages[error.code]||error.message||'Could not read your current location. Try again.',true);
-    $('nearbyList').innerHTML='';
+    nearbyMandaps=[];renderNearbyList();
   }finally{
-    if(!savingVisit)$('findNearby').disabled=false;
+    $('findNearby').disabled=false;
   }
 }
-
 async function loadPublicLocations(){
   try{
     const res=await fetch(SUPABASE_URL+'/rest/v1/puja_locations?select=id,name,latitude,longitude,description&order=name.asc',{headers:SUPABASE_HEADERS});
@@ -683,7 +813,7 @@ function render(){
   $('nPandal').textContent=named.length;$('nPuja').textContent=unique.length;
   $('nUnlocated').textContent=records.length-gps.length;$('nNamed').textContent=named.length;
   ['csv','json','clear'].forEach(i=>$(i).disabled=!records.length);
-  $('planRoute').disabled=unique.length<2;
+  $('planRoute').disabled=selectedPandalIds.size<1;
   $('openRoute').disabled=optimizedRoute.length<2;
   const q=$('q').value.toLowerCase();
   const shown=records.filter(r=>validPair(r.lat,r.lon)&&(r.pandalName||r.isPublic)&&(!q||[r.pandalName,r.name].join(' ').toLowerCase().includes(q)));
@@ -725,6 +855,7 @@ function render(){
     $('mCoord').focus();
   }));
   persistRecords();
+  renderNearbyList();
 }
 
 function parseManual(s){
@@ -814,7 +945,17 @@ $('signUp').addEventListener('click',signUp);
 $('signIn').addEventListener('click',signIn);
 $('signOut').addEventListener('click',signOut);
 $('findNearby').addEventListener('click',findNearbyMandaps);
-$('markSelectedVisited').addEventListener('click',()=>saveVisit(records[selectedRecordIndex],'manual'));
+$('selectAllNearby').addEventListener('change',()=>{
+  for(const record of nearbyMandaps){
+    const id=String(record.remoteId);
+    if($('selectAllNearby').checked)selectedPandalIds.add(id);else selectedPandalIds.delete(id);
+  }
+  renderNearbyList();
+});
+$('markSelectedVisited').addEventListener('click',()=>markSelectedMandaps(true));
+$('markSelectedNotVisited').addEventListener('click',()=>markSelectedMandaps(false));
+$('routeStartMode').addEventListener('change',()=>{updateJourneyControls();$('openRoute').disabled=true;});
+$('routeStartMandap').addEventListener('change',()=>{$('openRoute').disabled=true;});
 $('mPhoto').addEventListener('change',()=>{
   const index=Number($('mPhoto').value);
   if(!Number.isInteger(index)||!records[index])return;
@@ -832,55 +973,69 @@ function routeLength(list){
   for(let i=1;i<list.length;i++)sum+=distanceKm(list[i-1],list[i]);
   return sum;
 }
-function optimizeStops(){
-  const stops=uniquePujaLocations();
-  if(stops.length<2){$('routeSummary').textContent='Import at least two photos with GPS to plan a route.';return}
-  // Try every start with nearest-neighbour, then improve each candidate with 2-opt.
-  let best=null,bestLen=Infinity;
-  for(let start=0;start<stops.length;start++){
-    const remaining=stops.filter((_,i)=>i!==start),candidate=[stops[start]];
-    while(remaining.length){
-      const last=candidate[candidate.length-1];
-      let bi=0,bd=Infinity;
-      for(let i=0;i<remaining.length;i++){const d=distanceKm(last,remaining[i]);if(d<bd){bd=d;bi=i}}
-      candidate.push(remaining.splice(bi,1)[0]);
+async function optimizeStops(){
+  const stops=[...new Map(records.filter(r=>r.isPublic&&r.remoteId&&validPair(r.lat,r.lon)&&selectedPandalIds.has(String(r.remoteId))).map(r=>[String(r.remoteId),r])).values()];
+  if(!stops.length){$('routeSummary').textContent='Select at least one mandap above to plan a route.';return}
+  let origin;
+  if($('routeStartMode').value==='mandap'){
+    const start=records.find(r=>r.isPublic&&String(r.remoteId)===$('routeStartMandap').value&&validPair(r.lat,r.lon));
+    if(!start){$('routeSummary').textContent='Choose a valid starting mandap.';return}
+    origin={...start,pandalName:start.pandalName||start.name,routeOrigin:true};
+  }else{
+    $('routeSummary').textContent='Checking your current GPS location…';
+    $('planRoute').disabled=true;
+    try{
+      const position=await getCurrentVisitPosition();
+      if(!validPair(position.coords.latitude,position.coords.longitude))throw new Error('The device returned invalid GPS coordinates.');
+      origin={name:'Your current location',pandalName:'Your current location',lat:position.coords.latitude,lon:position.coords.longitude,routeOrigin:true};
+    }catch(e){
+      $('routeSummary').textContent='Could not get your starting location: '+(e.message||'GPS unavailable')+'. Choose a mandap as the starting point or allow GPS access.';
+      $('planRoute').disabled=false;return;
     }
-    let changed=true,passes=0;
-    while(changed&&passes++<Math.min(20,stops.length)){
-      changed=false;
-      for(let i=0;i<candidate.length-2;i++)for(let k=i+2;k<candidate.length;k++){
-        const before=(i?distanceKm(candidate[i-1],candidate[i]):0)+distanceKm(candidate[k],candidate[k+1]||candidate[k]);
-        const after=(i?distanceKm(candidate[i-1],candidate[k]):0)+distanceKm(candidate[i],candidate[k+1]||candidate[k]);
-        if(k===candidate.length-1) {
-          const old=i?distanceKm(candidate[i-1],candidate[i]):0;
-          const neu=i?distanceKm(candidate[i-1],candidate[k]):0;
-          if(neu+0.0001<old){candidate.splice(i,k-i+1,...candidate.slice(i,k+1).reverse());changed=true}
-        } else if(after+0.0001<before){candidate.splice(i,k-i+1,...candidate.slice(i,k+1).reverse());changed=true}
-      }
-    }
-    const len=routeLength(candidate);
-    if(len<bestLen){best=candidate;bestLen=len}
   }
-  optimizedRoute=best||[];
+  let remaining=stops.filter(r=>String(r.remoteId)!==String(origin.remoteId||''));
+  if(!remaining.length){$('routeSummary').textContent='Select at least one other mandap beyond your chosen starting mandap.';$('planRoute').disabled=false;return}
+  const candidate=[origin];
+  while(remaining.length){
+    const last=candidate[candidate.length-1];let bestIndex=0,bestDistance=Infinity;
+    for(let i=0;i<remaining.length;i++){const d=distanceKm(last,remaining[i]);if(d<bestDistance){bestDistance=d;bestIndex=i}}
+    candidate.push(remaining.splice(bestIndex,1)[0]);
+  }
+  let changed=true,passes=0;
+  while(changed&&passes++<Math.min(30,candidate.length)){
+    changed=false;
+    for(let i=1;i<candidate.length-2;i++)for(let k=i+1;k<candidate.length-1;k++){
+      const before=distanceKm(candidate[i-1],candidate[i])+distanceKm(candidate[k],candidate[k+1]);
+      const after=distanceKm(candidate[i-1],candidate[k])+distanceKm(candidate[i],candidate[k+1]);
+      if(after+0.0001<before){candidate.splice(i,k-i+1,...candidate.slice(i,k+1).reverse());changed=true}
+    }
+  }
+  optimizedRoute=candidate;
   routeLayer.clearLayers();
   const points=optimizedRoute.map(r=>[r.lat,r.lon]);
   L.polyline(points,{color:'#ffb454',weight:4,opacity:.9,dashArray:'8 7'}).addTo(routeLayer);
-  optimizedRoute.forEach((r,i)=>{
-    L.marker([r.lat,r.lon],{icon:L.divIcon({className:'route-number',html:'<span>'+(i+1)+'</span>',iconSize:[30,30],iconAnchor:[15,15]})})
-      .bindPopup('<b>Stop '+(i+1)+': '+esc((r.pandalName||'').trim()||r.name)+'</b><br>'+r.lat.toFixed(6)+', '+r.lon.toFixed(6))
+  const originMarker=L.marker([origin.lat,origin.lon],{icon:L.divIcon({className:'route-number',html:'<span>●</span>',iconSize:[30,30],iconAnchor:[15,15]})})
+    .bindPopup('<b>Start: '+esc(origin.pandalName||origin.name)+'</b>').addTo(routeLayer);
+  optimizedRoute.slice(1).forEach((r,i)=>{
+    const index=i+1;
+    L.marker([r.lat,r.lon],{icon:L.divIcon({className:'route-number',html:'<span>'+(index)+'</span>',iconSize:[30,30],iconAnchor:[15,15]})})
+      .bindPopup('<b>Stop '+index+': '+esc((r.pandalName||'').trim()||r.name)+'</b><br>'+r.lat.toFixed(6)+', '+r.lon.toFixed(6))
       .addTo(routeLayer);
   });
-  $('routeStops').innerHTML=optimizedRoute.map((r,i)=>'<li><b>'+esc((r.pandalName||'').trim()||r.name)+'</b><div class="muted">'+(i?distanceKm(optimizedRoute[i-1],r).toFixed(1)+' km from previous stop':'Starting stop')+'</div></li>').join('');
-  $('routeSummary').textContent=optimizedRoute.length+' stops · approx. '+bestLen.toFixed(1)+' km straight-line distance. This is an efficient geographic order, not guaranteed shortest road distance.';
-  $('openRoute').disabled=false;
+  $('routeStops').innerHTML='<li><b>Start: '+esc(origin.pandalName||origin.name)+'</b><div class="muted">Starting point</div></li>'+optimizedRoute.slice(1).map((r,i)=>'<li><b>'+esc((r.pandalName||'').trim()||r.name)+'</b><div class="muted">'+distanceKm(optimizedRoute[i],r).toFixed(1)+' km from previous stop</div></li>').join('');
+  const total=routeLength(optimizedRoute);
+  $('routeSummary').textContent=optimizedRoute.length-1+' selected mandap(s) · approx. '+total.toFixed(1)+' km straight-line distance. The map shows every selected stop; Google Maps road distance may differ.';
+  $('openRoute').disabled=optimizedRoute.length<2||optimizedRoute.length>11;
+  if(optimizedRoute.length>11)$('routeSummary').textContent+=' Google Maps supports only a limited number of stops per route, so open this route in sections.';
   map.fitBounds(L.latLngBounds(points).pad(.2),{maxZoom:16});
+  $('planRoute').disabled=false;
 }
 $('planRoute').addEventListener('click',optimizeStops);
 $('openRoute').addEventListener('click',()=>{
-  if(optimizedRoute.length<2)return;
+  if(optimizedRoute.length<2||optimizedRoute.length>11)return;
   const enc=p=>p.lat+','+p.lon;
   const first=optimizedRoute[0],last=optimizedRoute[optimizedRoute.length-1];
-  const waypoints=optimizedRoute.slice(1,-1).slice(0,9).map(enc).join('|');
+  const waypoints=optimizedRoute.slice(1,-1).map(enc).join('|');
   const url='https://www.google.com/maps/dir/?api=1&origin='+encodeURIComponent(enc(first))+'&destination='+encodeURIComponent(enc(last))+(waypoints?'&waypoints='+encodeURIComponent(waypoints):'')+'&travelmode=driving';
   window.open(url,'_blank','noopener');
 });
