@@ -317,7 +317,6 @@ async function signOut(){
 let savingVisit=false;
 async function saveVisit(r,method='manual'){
   if(savingVisit)return;
-  savingVisit=true;
   if(!r||!r.isPublic||!r.remoteId||!validPair(r.lat,r.lon)){
     setVisitStatus('Choose a mandap from the shared map before recording a visit.',true);return;
   }
@@ -330,6 +329,7 @@ async function saveVisit(r,method='manual'){
   const year=new Date().getFullYear();
   const already=visitRecords.some(v=>v.pandal_id===r.remoteId&&Number(v.puja_year)===year);
   if(already&&!confirm('You already recorded this mandap this year. Record another visit?'))return;
+  savingVisit=true;
   const button=$('findNearby');button.disabled=true;
   try{
     const body={
