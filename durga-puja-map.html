@@ -33,7 +33,7 @@ th,td{text-align:left;padding:9px 11px;border-bottom:1px solid var(--line);font-
 <body>
 <div class="wrap">
 <p class="muted">Android-first · Photo GPS · Puja route planner</p><h1>Turn your photos into a <span>festival map.</span></h1>
-<p class="muted">Photos are read temporarily on your device. Only named location coordinates are saved and shared publicly.</p>
+<p class="muted">Photos are read temporarily on your device and never uploaded. Valid GPS coordinates can be shared publicly; pandal names are optional.</p>
 
 <div class="grid">
 <section class="panel">
@@ -116,7 +116,7 @@ th,td{text-align:left;padding:9px 11px;border-bottom:1px solid var(--line);font-
 
 <div class="row" style="justify-content:space-between;align-items:center"><h2 style="margin:12px 0 0">Location inventory</h2><input id="q" type="text" placeholder="Filter locations…" style="max-width:240px"></div>
 <div class="row"><button id="csv" disabled>Export locations CSV</button><button id="json" disabled>Export locations JSON</button><button id="clear" disabled>Clear local locations</button></div>
-<p class="muted">Only named locations and GPS coordinates are retained. Photos are read temporarily and never uploaded.</p>
+<p class="muted">Shared mandap locations and GPS coordinates are retained. Photos are read temporarily and never uploaded.</p>
 <div class="tw"><table><thead><tr><th>Location name</th><th>GPS coordinates</th><th>Status</th></tr></thead><tbody id="rows"><tr><td colspan="3" class="muted" style="text-align:center;padding:20px">No locations yet.</td></tr></tbody></table></div>
 </div>
 
@@ -284,9 +284,9 @@ async function signUp(){
   try{
     const data=await authRequest('/auth/v1/signup',{email,password});
     if(data.access_token&&data.refresh_token){
-      saveAuthSession(data);updateAccountUI();await loadVisitHistory();
+      saveAuthSession(data);updateAccountUI();
       setAccountStatus('Account created and signed in. Your Puja journey is ready.');
-      setVisitStatus('Your visit history is synced. Find nearby mandaps when you are ready.');
+      try{await loadVisitHistory();setVisitStatus('Your visit history is synced. Find nearby mandaps when you are ready.')}catch(e){setVisitStatus('Signed in, but visit history could not load: '+e.message,true)}
     }else{
       setAccountStatus('Account created. Check your email for the confirmation link, then return here and sign in.');
     }
@@ -299,8 +299,9 @@ async function signIn(){
   $('signIn').disabled=true;
   try{
     const data=await authRequest('/auth/v1/token?grant_type=password',{email,password});
-    saveAuthSession(data);updateAccountUI();await loadVisitHistory();
-    setVisitStatus('Signed in. Your personal visit history is synced across devices.');
+    saveAuthSession(data);updateAccountUI();
+    setAccountStatus('Signed in successfully.');
+    try{await loadVisitHistory();setVisitStatus('Signed in. Your personal visit history is synced across devices.')}catch(e){setVisitStatus('Signed in, but visit history could not load: '+e.message,true)}
   }catch(e){setAccountStatus('Could not sign in: '+e.message,true)}
   finally{$('signIn').disabled=false}
 }
@@ -313,7 +314,10 @@ async function signOut(){
   setAccountStatus('Signed out. Your cloud visit history remains saved to your account.');
   setVisitStatus('Sign in to view or add to your personal visit history.');
 }
+let savingVisit=false;
 async function saveVisit(r,method='manual'){
+  if(savingVisit)return;
+  savingVisit=true;
   if(!r||!r.isPublic||!r.remoteId||!validPair(r.lat,r.lon)){
     setVisitStatus('Choose a mandap from the shared map before recording a visit.',true);return;
   }
@@ -349,7 +353,7 @@ async function saveVisit(r,method='manual'){
     setVisitStatus('Visit saved to your private history: '+body.pandal_name+'.');
   }catch(e){
     setVisitStatus('Visit was not confirmed as saved: '+e.message,true);
-  }finally{button.disabled=false}
+  }finally{button.disabled=false;savingVisit=false}
 }
 function findNearbyMandaps(){
   if(!navigator.geolocation){
@@ -675,7 +679,7 @@ function render(){
   $('rows').innerHTML=shown.length?shown.map(r=>{
     const name=(r.pandalName||r.name||'Unnamed location');
     return `<tr><td>${esc(name)}</td><td>${r.lat.toFixed(6)}, ${r.lon.toFixed(6)}</td><td>${r.isPublic?'<span class="tag">Public community map</span>':(r.confirmed?'Confirmed · local':'Not yet confirmed')}</td></tr>`;
-  }).join(''):'<tr><td colspan="3" class="muted" style="text-align:center;padding:20px">No named locations yet. Name a GPS location in Review to save it.</td></tr>';
+  }).join(''):'<tr><td colspan="3" class="muted" style="text-align:center;padding:20px">No locations yet. Import photos with GPS or load the shared mandap map.</td></tr>';
   if(layer){
     layer.clearLayers();
     unique.forEach(r=>{
