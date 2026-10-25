@@ -69,7 +69,7 @@ jobs:
           EOF
       - name: Native code
         run: |
-          sed -i 's#<application#<uses-permission android:name="android.permission.READ_MEDIA_IMAGES"/>\n    <uses-permission android:name="android.permission.ACCESS_MEDIA_LOCATION"/>\n    <application#' android/app/src/main/AndroidManifest.xml
+          sed -i 's#<application#<uses-permission android:name="android.permission.READ_MEDIA_IMAGES"/>\n    <uses-permission android:name="android.permission.ACCESS_MEDIA_LOCATION"/>\n    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>\n    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>\n    <application#' android/app/src/main/AndroidManifest.xml
           D=android/app/src/main/java/com/barshan/durgamap
           cat > $D/PhotoPickerPlugin.java <<'EOF'
           package com.barshan.durgamap;
