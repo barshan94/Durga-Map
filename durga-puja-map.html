@@ -506,7 +506,9 @@ function renderNearbyMap(){
       .bindPopup('<b>Your current location</b>').addTo(nearbyLayer);
   }
   for(const r of nearbyMandaps){
-    const marker=L.marker([r.lat,r.lon]).bindPopup('<b>'+esc(r.pandalName||r.name||'Unnamed mandap')+'</b><br>'+(r.distance>=1000?(r.distance/1000).toFixed(1)+' km away':Math.round(r.distance)+' m away'));
+    const distanceLabel=Number.isFinite(r.distance)?(r.distance>=1000?(r.distance/1000).toFixed(1)+' km away':Math.round(r.distance)+' m away'):'Distance unavailable';
+    const mapsUrl='https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(r.lat+','+r.lon);
+    const marker=L.marker([r.lat,r.lon]).bindPopup('<b>'+esc(r.pandalName||r.name||'Unnamed mandap')+'</b><br>'+distanceLabel+'<br><a href="'+mapsUrl+'" target="_blank" rel="noopener">Open in Google Maps</a>');
     marker.addTo(nearbyLayer);
     marker.on('click',()=>{if(!selectedPandalIds.has(String(r.remoteId))){selectedPandalIds.add(String(r.remoteId));renderNearbyList();}});
   }
