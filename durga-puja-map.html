@@ -51,6 +51,8 @@ th,td{text-align:left;padding:9px 11px;border-bottom:1px solid var(--line);font-
 <div class="row">
 <label class="btn primary" for="files">Choose files (keep GPS)</label>
 <input id="files" type="file" accept="image/*,.json" multiple>
+<label class="btn" for="folderFiles">Select whole folder</label>
+<input id="folderFiles" type="file" accept="image/*,.json" webkitdirectory directory multiple>
 </div>
 <div class="stats"><div class="stat"><b id="nTotal">0</b><span class="muted">Photos scanned</span></div><div class="stat"><b id="nGps">0</b><span class="muted">Locations found</span></div><div class="stat"><b id="nPandal">0</b><span class="muted">Named pandals</span></div></div>
 <div id="status">Waiting for photos.</div>
@@ -1085,7 +1087,9 @@ $('csv').onclick=()=>{const d=clean();if(!d.length)return;const h=Object.keys(d[
 $('json').onclick=()=>download('puja-locations.json',JSON.stringify(clean(),null,2),'application/json');
 $('clear').onclick=()=>{records=records.filter(r=>r.isPublic);sidecars.clear();optimizedRoute=[];selectedRecordIndex=0;routeLayer?.clearLayers();render();persistRecords();setStatus('Cleared local location data. Shared public locations remain available.')};
 $('q').oninput=render;
-$('files').onchange=async e=>{await handle(e.target.files);optimizedRoute=[];e.target.value=''};
+const handleFilePicker=async e=>{if(!e.target.files?.length)return;await handle(e.target.files);optimizedRoute=[];e.target.value=''};
+$('files').onchange=handleFilePicker;
+$('folderFiles').onchange=handleFilePicker;
 $('signUp').addEventListener('click',signUp);
 $('signIn').addEventListener('click',signIn);
 $('signOut').addEventListener('click',signOut);
