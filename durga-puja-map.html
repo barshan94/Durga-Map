@@ -26,7 +26,7 @@ th,td{text-align:left;padding:9px 11px;border-bottom:1px solid var(--line);font-
 .auth-fields{display:grid;gap:6px;margin-top:12px}.auth-fields label{font-size:13px;color:var(--muted)}input[type=email],input[type=password]{width:100%;background:var(--bg);color:var(--text);border:1px solid var(--line);border-radius:9px;padding:10px;font:inherit}.journey-stat b{font-size:25px}.nearby-item{display:flex;gap:10px;align-items:center;justify-content:space-between;background:var(--p2);border:1px solid var(--line);border-radius:10px;padding:10px}.nearby-item .nearby-info{min-width:0;overflow-wrap:anywhere}.nearby-item .nearby-meta{font-size:12px;color:var(--muted)}.nearby-item button{flex-shrink:0;padding:7px 10px}.history-item{display:flex;gap:10px;align-items:flex-start;justify-content:space-between;padding:10px 2px;border-bottom:1px solid var(--line)}.history-item:last-child{border-bottom:0}.history-item .history-meta{font-size:12px;color:var(--muted)}.auth-status,.visit-status{white-space:pre-wrap;margin-top:8px}
 
 .route-number{background:transparent;border:0}
-.route-number span{display:flex;align-items:center;justify-content:center;width:30px;height:30px;border:2px solid #101713;border-radius:50%;background:#ffb454;color:#172014;font-weight:800;box-shadow:0 2px 7px #0008}
+.route-number span{display:flex;align-items:center;justify-content:center;width:30px;height:30px;border:2px solid #101713;border-radius:50%;background:#ffb454;color:#172014;font-weight:800;box-shadow:0 2px 7px #0008}.page-view{display:none}.page-view.active{display:block}.main-nav{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:7px;margin:18px 0 16px}.main-nav button{padding:10px 6px;font-size:13px}.main-nav button.active{background:var(--lime);color:#172014;border-color:var(--lime)}.page-intro{margin:0 0 12px}#nearbyMap,#routeMap{height:360px;border-radius:12px;border:1px solid var(--line);margin:12px 0}.map-link{display:inline-block;margin-top:6px;color:var(--lime);font-size:13px}@media(max-width:520px){.main-nav{grid-template-columns:repeat(3,minmax(0,1fr))}.main-nav button{font-size:12px;padding:9px 4px}#nearbyMap,#routeMap{height:300px}}
 
 </style>
 </head>
@@ -35,6 +35,15 @@ th,td{text-align:left;padding:9px 11px;border-bottom:1px solid var(--line);font-
 <p class="muted">Android-first · Photo GPS · Puja route planner</p><h1>Turn your photos into a <span>festival map.</span></h1>
 <p class="muted">Photos are read temporarily on your device and never uploaded. Valid GPS coordinates can be shared publicly; pandal names are optional.</p>
 
+<nav class="main-nav" aria-label="Main navigation">
+  <button type="button" data-page="page-map" class="active">Public map</button>
+  <button type="button" data-page="page-import">Import photos</button>
+  <button type="button" data-page="page-journey">My Puja Journey</button>
+  <button type="button" data-page="page-route">Visiting route</button>
+  <button type="button" data-page="page-account">Sign in</button>
+</nav>
+
+<section id="page-import" class="page-view">
 <div class="grid">
 <section class="panel">
 <h2>1 · Import</h2>
@@ -49,10 +58,11 @@ th,td{text-align:left;padding:9px 11px;border-bottom:1px solid var(--line);font-
 
 <section class="panel">
 <h2>2 · Review locations</h2>
-<p class="muted">Select a record and adjust coordinates if needed. Pandal names are optional. Use Save this location or Save all GPS locations to publish to the shared map.</p>
+<p class="muted">Select a photo to review its GPS. If the name is blank, we will try to suggest a nearby place name from map data. Check the suggestion before publishing. Photos stay on this device.</p>
 <select id="mPhoto" disabled><option>Import photos first</option></select>
 <label class="muted" for="mPandalName">Pandal name (optional)</label>
-<input id="mPandalName" type="text" maxlength="160" style="margin-top:4px" placeholder="e.g. Ramna Kali Mandir Puja">
+<input id="mPandalName" type="text" maxlength="160" style="margin-top:4px" placeholder="Suggested automatically when available">
+<a id="googleMapPlace" class="map-link" href="https://maps.google.com/" target="_blank" rel="noopener">Open location in Google Maps</a>
 <label class="muted" for="mCoord" style="display:block;margin-top:10px">GPS coordinates</label>
 <input id="mCoord" type="text" style="margin-top:4px" placeholder="23.615944, 90.503167 or 23°36'57.4&quot;N 90°30'11.4&quot;E">
 <div class="row"><button id="mApply" class="primary" disabled>Save this location</button><button id="mConfirm" disabled>Confirm this location</button><button id="mClear" disabled>Remove GPS</button><button id="mSaveAll" disabled>Save all GPS locations</button></div>
@@ -60,15 +70,21 @@ th,td{text-align:left;padding:9px 11px;border-bottom:1px solid var(--line);font-
 <div id="reviewList" class="review-list" aria-live="polite"></div>
 </section>
 </div>
+</section>
 
-<section class="panel" style="margin-top:14px" aria-labelledby="mapHeading">
+<section id="page-map" class="page-view active">
+<section class="panel" style="margin-top:0" aria-labelledby="mapHeading">
   <h2 id="mapHeading">3 · Your Puja map</h2>
   <p class="muted">All locations detected from your photos appear here. Give a location a pandal name in Step 2 to make it easier to identify.</p>
   <div class="stats"><div class="stat"><b id="nPuja">0</b><span class="muted">Puja locations</span></div><div class="stat"><b id="nUnlocated">0</b><span class="muted">Photos without GPS</span></div><div class="stat"><b id="nNamed">0</b><span class="muted">Named locations</span></div></div>
   <div id="map" style="margin-top:12px"></div>
 </section>
 
-<section class="panel" style="margin-top:14px" aria-labelledby="accountHeading">
+</section>
+</section>
+
+<section id="page-account" class="page-view">
+<section class="panel" style="margin-top:0" aria-labelledby="accountHeading">
   <h2 id="accountHeading">4 · Your account</h2>
   <p class="muted">Explore the shared mandap map without signing in. Create an account to keep your personal visit history across devices and years. Your visit history is private.</p>
   <div id="authFields" class="auth-fields">
@@ -85,9 +101,15 @@ th,td{text-align:left;padding:9px 11px;border-bottom:1px solid var(--line);font-
   <div id="accountStatus" class="muted auth-status" aria-live="polite">Not signed in. You can still browse the public map.</div>
 </section>
 
-<section class="panel" style="margin-top:14px" aria-labelledby="journeyHeading">
-  <h2 id="journeyHeading">5 · My Puja journey</h2>
-  <p class="muted">Find public mandaps within 5 km of you. Select places one by one or select all, then mark them visited or not visited. Your choices are private and sync to your account.</p>
+</section>
+</section>
+
+<section id="page-journey" class="page-view">
+<section class="panel" style="margin-top:0" aria-labelledby="journeyHeading">
+  <h2 id="journeyHeading">My Puja Journey</h2>
+  <p class="muted page-intro">Choose the mandaps you want to visit. Use the Visiting route tab when you are ready to plan your stops.</p>
+  <div class="row" style="margin:0 0 10px"><button type="button" data-page="page-route">Plan visiting route</button><button type="button" data-page="page-account">Sign in to sync</button></div>
+  <p class="muted">Find public mandaps within 5 km of you. Use the map to see where they are, select places one by one or select all, and mark your visit status. Sign in is only needed to save private visit choices.</p>
   <div class="row">
     <button id="findNearby" class="primary" type="button">Find nearby mandaps</button>
     <label class="row" style="align-items:center;margin:0;gap:7px;padding:8px 4px"><input id="selectAllNearby" type="checkbox" style="width:auto"> Select all nearby</label>
@@ -97,6 +119,9 @@ th,td{text-align:left;padding:9px 11px;border-bottom:1px solid var(--line);font-
     <button id="markSelectedNotVisited" type="button" disabled>Mark selected not visited</button>
   </div>
   <div id="visitStatus" class="muted visit-status" aria-live="polite">Sign in to sync your private visit choices.</div>
+  <h3 style="margin:16px 0 4px;font-size:15px">Nearby mandaps on the map</h3>
+  <p class="muted" style="margin:0">Your location and each nearby mandap will appear here. Tap a marker to see its name.</p>
+  <div id="nearbyMap" role="application" aria-label="Map of nearby mandaps"></div>
   <div id="nearbyList" class="review-list" aria-live="polite"><p class="muted">Tap Find nearby mandaps to get started.</p></div>
   <details style="margin-top:12px">
     <summary style="cursor:pointer;font-weight:650">My saved visit history</summary>
@@ -109,9 +134,14 @@ th,td{text-align:left;padding:9px 11px;border-bottom:1px solid var(--line);font-
   </details>
 </section>
 
-<section class="panel" style="margin-top:14px" aria-labelledby="routeHeading">
-  <h2 id="routeHeading">6 · Shortest visiting route</h2>
-  <p class="muted">Select the pandals you want to cover above. Choose your starting point, then the app will order the selected stops by shortest straight-line distance and show the route on the map.</p>
+</section>
+</section>
+
+<section id="page-route" class="page-view">
+<section class="panel" style="margin-top:0" aria-labelledby="routeHeading">
+  <h2 id="routeHeading">Shortest visiting route</h2>
+  <div class="row" style="margin:0 0 10px"><button type="button" data-page="page-journey">Choose mandaps</button></div>
+  <p class="muted">Select mandaps on the My Puja Journey page first. Choose your starting point here, then the app orders the selected stops by approximate geographic distance and plots them below.</p>
   <label for="routeStartMode" class="muted">Start route from</label>
   <select id="routeStartMode" style="margin-top:4px">
     <option value="gps">My current GPS location</option>
@@ -125,7 +155,8 @@ th,td{text-align:left;padding:9px 11px;border-bottom:1px solid var(--line);font-
     <button id="planRoute" class="primary" type="button" disabled>Find shortest route</button>
     <button id="openRoute" type="button" disabled>Open route in Google Maps</button>
   </div>
-  <div id="routeSummary" class="muted" style="margin-top:10px">Select pandals above to plan your route.</div>
+  <div id="routeSummary" class="muted" style="margin-top:10px">Select pandals in My Puja Journey, then return here to plan your route.</div>
+  <div id="routeMap" role="application" aria-label="Optimized visiting route map"></div>
   <ol id="routeStops" style="padding-left:24px"></ol>
 </section>
 
@@ -133,6 +164,8 @@ th,td{text-align:left;padding:9px 11px;border-bottom:1px solid var(--line);font-
 <div class="row"><button id="csv" disabled>Export locations CSV</button><button id="json" disabled>Export locations JSON</button><button id="clear" disabled>Clear local locations</button></div>
 <p class="muted">Shared mandap locations and GPS coordinates are retained. Photos are read temporarily and never uploaded.</p>
 <div class="tw"><table><thead><tr><th>Location name</th><th>GPS coordinates</th><th>Status</th></tr></thead><tbody id="rows"><tr><td colspan="3" class="muted" style="text-align:center;padding:20px">No locations yet.</td></tr></tbody></table></div>
+</section>
+
 </div>
 
 </div>
