@@ -136,11 +136,13 @@ async function loadPublicLocations(){
   }catch(e){console.warn('Could not load public Puja locations',e);setStatus('Could not load shared locations. Saved device locations remain available.',true)}
 }
 async function publishLocation(r){
-  if(!r||!validPair(r.lat,r.lon)||!(r.pandalName||'').trim()){
-    $('mStatus').textContent='Cannot save: a pandal name and valid GPS coordinates are required.';
+  if(!r||!validPair(r.lat,r.lon)){
+    $('mStatus').textContent='Cannot save: valid GPS coordinates are required.';
     return false;
   }
-  const body={name:r.pandalName.trim(),latitude:r.lat,longitude:r.lon,description:''};
+  // Pandal name is optional. The database requires a name column, so generate a stable fallback from coordinates.
+  const optionalName=(r.pandalName||'').trim();
+  const body={name:optionalName||('Unnamed location '+Number(r.lat).toFixed(5)+', '+Number(r.lon).toFixed(5)),latitude:r.lat,longitude:r.lon,description:optionalName?'':'Pandal name not provided'};
   const endpoint=SUPABASE_URL+'/rest/v1/puja_locations?select=id,name,latitude,longitude,description';
   const matchesThisLocation=rows=>Array.isArray(rows)&&rows.find(p=>
     String(p.name||'').trim().toLowerCase()===body.name.toLowerCase()&&
@@ -459,25 +461,23 @@ $('mApply').onclick=async()=>{
   const [a,b]=parseManual($('mCoord').value);
   if(!validPair(a,b)){$('mStatus').textContent='Could not read those coordinates.';return}
   const r=records[selectedRecordIndex];if(!r)return;
-  r.lat=a;r.lon=b;r.pandalName=$('mPandalName').value.trim();r.name=r.pandalName||r.name||'Saved location';r.confirmed=true;
+  r.lat=a;r.lon=b;r.pandalName=$('mPandalName').value.trim();r.name=r.pandalName||r.name||('Unnamed location '+a.toFixed(5)+', '+b.toFixed(5));r.confirmed=true;
   optimizedRoute=[];render();
   const saved=persistRecords();
   if(!saved){$('mStatus').textContent='Could not save on this device. Check browser/app storage settings.';return}
-  if(!r.pandalName){$('mStatus').textContent='Not saved permanently. Enter a pandal name to save this location to the shared database.';return}
-  $('mStatus').textContent='Saving to the shared database…';
-  if(await publishLocation(r)){persistRecords();await loadPublicLocations();$('mStatus').textContent='Saved permanently and shared with all users: '+r.pandalName}
+  $('mStatus').textContent='Saving location to the shared database…';
+  if(await publishLocation(r)){persistRecords();await loadPublicLocations();$('mStatus').textContent='Saved permanently and shared with all users: '+(r.pandalName||r.name||'Unnamed location')}
   else $('mStatus').textContent='CLOUD SAVE FAILED. This location is only a temporary device draft and is not shared. Please retry; do not rely on it being saved.'
 };
 $('mConfirm').onclick=async()=>{
   const r=records[selectedRecordIndex];if(!r)return;
   if(!validPair(r.lat,r.lon)){$('mStatus').textContent='This record has no valid GPS coordinates to confirm.';return}
-  r.pandalName=$('mPandalName').value.trim();r.name=r.pandalName||r.name||'Saved location';r.confirmed=true;
+  r.pandalName=$('mPandalName').value.trim();r.name=r.pandalName||r.name||('Unnamed location '+Number(r.lat).toFixed(5)+', '+Number(r.lon).toFixed(5));r.confirmed=true;
   render();
   const saved=persistRecords();
   if(!saved){$('mStatus').textContent='Could not save on this device. Check browser/app storage settings.';return}
-  if(!r.pandalName){$('mStatus').textContent='Not saved permanently. Enter a pandal name to save this location to the shared database.';return}
-  $('mStatus').textContent='Saving to the shared database…';
-  if(await publishLocation(r)){persistRecords();await loadPublicLocations();$('mStatus').textContent='Saved permanently and shared with all users: '+r.pandalName}
+  $('mStatus').textContent='Saving location to the shared database…';
+  if(await publishLocation(r)){persistRecords();await loadPublicLocations();$('mStatus').textContent='Saved permanently and shared with all users: '+(r.pandalName||r.name||'Unnamed location')}
   else $('mStatus').textContent='CLOUD SAVE FAILED. This location is only a temporary device draft and is not shared. Please retry; do not rely on it being saved.'
 };
 $('mConfirmAll').onclick=()=>{
