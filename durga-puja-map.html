@@ -114,9 +114,10 @@ th,td{text-align:left;padding:9px 11px;border-bottom:1px solid var(--line);font-
   <h2 id="journeyHeading">My Puja Journey</h2>
   <p class="muted page-intro">Choose the mandaps you want to visit. Use the Visiting route tab when you are ready to plan your stops.</p>
   <div class="row" style="margin:0 0 10px"><button type="button" data-page="page-route">Plan visiting route</button><button type="button" data-page="page-account" id="journeyAccountLink">Sign in to sync</button></div>
-  <p class="muted">Find public mandaps within 5 km of you. Use the map to see where they are, select places one by one or select all, and mark your visit status. Sign in is only needed to save private visit choices.</p>
+  <p class="muted">Load nearby mandaps for visit tracking, or load the entire public mandap list for planning next year's trip across districts. You can select locations from the full list without being physically nearby.</p>
   <div class="row">
-    <button id="findNearby" class="primary" type="button">Find nearby mandaps</button>
+    <button id="findNearby" type="button">Find nearby mandaps</button>
+    <button id="loadAllMandaps" class="primary" type="button">Load all public mandaps</button>
     <label class="row" style="align-items:center;margin:0;gap:7px;padding:8px 4px"><input id="selectAllNearby" type="checkbox" style="width:auto"> Select all nearby</label>
   </div>
   <div class="row">
@@ -145,7 +146,7 @@ th,td{text-align:left;padding:9px 11px;border-bottom:1px solid var(--line);font-
 <section class="panel" style="margin-top:0" aria-labelledby="routeHeading">
   <h2 id="routeHeading">Shortest visiting route</h2>
   <div class="row" style="margin:0 0 10px"><button type="button" data-page="page-journey">Choose mandaps</button></div>
-  <p class="muted">Select mandaps on the My Puja Journey page first. Choose your starting point here, then the app orders the selected stops by approximate geographic distance and plots them below.</p>
+  <p class="muted">Load all public mandaps on My Puja Journey to plan beyond your current area. Select any number of locations, choose a starting point, and order stops by approximate geographic distance. Google Maps has waypoint limits, so long trips are split into clickable route sections and every stop also gets its own Google Maps link.</p>
   <label for="routeStartMode" class="muted">Start route from</label>
   <select id="routeStartMode" style="margin-top:4px">
     <option value="gps">My current GPS location</option>
@@ -523,7 +524,9 @@ function renderNearbyList(){
       const status=pandalStatuses.get(id);
       const statusText=status?(status.visited?'Visited this year':'Marked not visited'):'Not marked yet';
       const statusClass=status?.visited?'review-state':'review-meta';
-      return '<label class="nearby-item"><input type="checkbox" data-select-pandal="'+esc(id)+'" '+(selectedPandalIds.has(id)?'checked':'')+' style="width:auto;flex-shrink:0"><div class="nearby-info" style="flex:1"><strong>'+esc(r.pandalName||r.name||'Unnamed mandap')+'</strong><div class="nearby-meta">'+(r.distance>=1000?(r.distance/1000).toFixed(1)+' km away':Math.round(r.distance)+' m away')+' · <span class="'+statusClass+'">'+statusText+'</span></div></div></label>';
+      const distanceLabel=Number.isFinite(r.distance)?(r.distance>=1000?(r.distance/1000).toFixed(1)+' km away':Math.round(r.distance)+' m away'):'Distance unavailable';
+      const mapsUrl='https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(r.lat+','+r.lon);
+      return '<div class="nearby-item"><input type="checkbox" data-select-pandal="'+esc(id)+'" '+(selectedPandalIds.has(id)?'checked':'')+' style="width:auto;flex-shrink:0"><div class="nearby-info" style="flex:1"><strong>'+esc(r.pandalName||r.name||'Unnamed mandap')+'</strong><div class="nearby-meta">'+distanceLabel+' · <span class="'+statusClass+'">'+statusText+'</span></div><a class="map-link" href="'+mapsUrl+'" target="_blank" rel="noopener">Open in Google Maps</a></div></div>';
     }).join('');
   }
   list.querySelectorAll('[data-select-pandal]').forEach(input=>input.addEventListener('change',()=>{
@@ -1099,6 +1102,17 @@ $('signUp').addEventListener('click',signUp);
 $('signIn').addEventListener('click',signIn);
 $('signOut').addEventListener('click',signOut);
 $('findNearby').addEventListener('click',findNearbyMandaps);
+$('loadAllMandaps').addEventListener('click',()=>{
+  const unique=new Map();
+  records.filter(r=>r.isPublic&&r.remoteId&&validPair(r.lat,r.lon)).forEach(r=>{
+    if(!unique.has(String(r.remoteId)))unique.set(String(r.remoteId),r);
+  });
+  const origin=nearbyOrigin&&validPair(nearbyOrigin.lat,nearbyOrigin.lon)?nearbyOrigin:null;
+  nearbyMandaps=[...unique.values()].map(r=>({...r,distance:origin?distanceKm(origin,r)*1000:NaN}))
+    .sort((a,b)=>String(a.pandalName||a.name).localeCompare(String(b.pandalName||b.name)));
+  renderNearbyMap();renderNearbyList();
+  setVisitStatus('Loaded all '+nearbyMandaps.length+' public mandap(s) with valid coordinates. Select locations for a long-distance route; distance from you is shown only if GPS was previously obtained.');
+});
 $('selectAllNearby').addEventListener('change',()=>{
   for(const record of nearbyMandaps){
     const id=String(record.remoteId);
@@ -1179,17 +1193,34 @@ async function optimizeStops(){
   $('routeStops').innerHTML='<li><b>Start: '+esc(origin.pandalName||origin.name)+'</b><div class="muted">Starting point</div></li>'+optimizedRoute.slice(1).map((r,i)=>'<li><b>'+esc((r.pandalName||'').trim()||r.name)+'</b><div class="muted">'+distanceKm(optimizedRoute[i],r).toFixed(1)+' km from previous stop</div></li>').join('');
   const total=routeLength(optimizedRoute);
   $('routeSummary').textContent=optimizedRoute.length-1+' selected mandap(s) · approx. '+total.toFixed(1)+' km straight-line distance. The map shows every selected stop; Google Maps road distance may differ.';
-  $('openRoute').disabled=optimizedRoute.length<2||optimizedRoute.length>11;
-  if(optimizedRoute.length>11)$('routeSummary').textContent+=' Google Maps supports only a limited number of stops per route, so open this route in sections.';
+  $('openRoute').disabled=optimizedRoute.length<2;
+  const routeUrlFor=segment=>{
+    const enc=p=>p.lat+','+p.lon;
+    const first=segment[0],last=segment[segment.length-1];
+    const waypoints=segment.slice(1,-1).map(enc).join('|');
+    return 'https://www.google.com/maps/dir/?api=1&origin='+encodeURIComponent(enc(first))+'&destination='+encodeURIComponent(enc(last))+(waypoints?'&waypoints='+encodeURIComponent(waypoints):'')+'&travelmode=driving';
+  };
+  const sections=[];
+  let start=0;
+  while(start<optimizedRoute.length-1){
+    const end=Math.min(start+9,optimizedRoute.length-1);
+    sections.push({start,end,items:optimizedRoute.slice(start,end+1)});
+    start=end;
+  }
+  const sectionLinks=sections.map((s,i)=>'<li><a class="map-link" href="'+routeUrlFor(s.items)+'" target="_blank" rel="noopener">Open route section '+(i+1)+' (stops '+(s.start+1)+'–'+(s.end+1)+') in Google Maps</a></li>').join('');
+  const stopLinks=optimizedRoute.map((r,i)=>'<li><b>'+esc(i===0?'Start: '+(r.pandalName||r.name):(r.pandalName||r.name||'Unnamed mandap'))+'</b><div class="muted">'+(i===0?'Starting point':distanceKm(optimizedRoute[i-1],r).toFixed(1)+' km straight-line from previous stop')+'</div><a class="map-link" href="https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(r.lat+','+r.lon)+'" target="_blank" rel="noopener">Open this location in Google Maps</a></li>').join('');
+  $('routeStops').innerHTML='<h3>Google Maps route sections</h3><ol>'+sectionLinks+'</ol><h3>Every planned location</h3><ol>'+stopLinks+'</ol>';
+  if(sections.length>1)$('routeSummary').textContent+=' This trip contains '+sections.length+' Google Maps sections because Google Maps limits waypoints per route. Open each section in order; the sections overlap at connecting stops.';
   routeMap.fitBounds(L.latLngBounds(points).pad(.2),{maxZoom:16});
   $('planRoute').disabled=false;
 }
 $('planRoute').addEventListener('click',optimizeStops);
 $('openRoute').addEventListener('click',()=>{
-  if(optimizedRoute.length<2||optimizedRoute.length>11)return;
+  if(optimizedRoute.length<2)return;
   const enc=p=>p.lat+','+p.lon;
-  const first=optimizedRoute[0],last=optimizedRoute[optimizedRoute.length-1];
-  const waypoints=optimizedRoute.slice(1,-1).map(enc).join('|');
+  const section=optimizedRoute.slice(0,Math.min(10,optimizedRoute.length));
+  const first=section[0],last=section[section.length-1];
+  const waypoints=section.slice(1,-1).map(enc).join('|');
   const url='https://www.google.com/maps/dir/?api=1&origin='+encodeURIComponent(enc(first))+'&destination='+encodeURIComponent(enc(last))+(waypoints?'&waypoints='+encodeURIComponent(waypoints):'')+'&travelmode=driving';
   window.open(url,'_blank','noopener');
 });
