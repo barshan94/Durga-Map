@@ -173,6 +173,16 @@ th,td{text-align:left;padding:9px 11px;border-bottom:1px solid var(--line);font-
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script type="module">
 const $=id=>document.getElementById(id);
+function showPage(id){
+  document.querySelectorAll('.page-view').forEach(page=>page.classList.toggle('active',page.id===id));
+  document.querySelectorAll('[data-page]').forEach(button=>button.classList.toggle('active',button.dataset.page===id));
+  if(id==='page-map'&&map)requestAnimationFrame(()=>map.invalidateSize());
+  if(id==='page-journey'&&nearbyMap)requestAnimationFrame(()=>nearbyMap.invalidateSize());
+  if(id==='page-route'&&routeMap)requestAnimationFrame(()=>routeMap.invalidateSize());
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+document.querySelectorAll('[data-page]').forEach(button=>button.addEventListener('click',()=>showPage(button.dataset.page)));
+
 const SUPABASE_URL='https://iomikfkjawupfyppzamj.supabase.co';
 const SUPABASE_PUBLISHABLE_KEY='sb_publishable_oq6KLlCX0CBDxydBXWkKjA__6veVLGY';
 function loadSavedRecords(){
@@ -183,7 +193,7 @@ function loadSavedRecords(){
     return saved.map((r,i)=>({name:String(r.name||r.pandalName||'Saved location '+(i+1)),pandalName:String(r.pandalName||r.name||''),lat:Number.isFinite(r.lat)?r.lat:NaN,lon:Number.isFinite(r.lon)?r.lon:NaN,confirmed:!!r.confirmed,file:null,remoteId:r.remoteId||null,isPublic:!!r.isPublic}));
   }catch{return []}
 }
-let records=loadSavedRecords(),sidecars=new Map(),map,layer,routeLayer,exifr=null,optimizedRoute=[],selectedRecordIndex=0;
+let records=loadSavedRecords(),sidecars=new Map(),map,layer,routeMap,routeLayer,nearbyMap,nearbyLayer,nearbyOrigin=null,exifr=null,optimizedRoute=[],selectedRecordIndex=0,placeLookupToken=0;
 let nearbyMandaps=[],selectedPandalIds=new Set(),pandalStatuses=new Map();
 function persistRecords(){
   try{
@@ -466,6 +476,21 @@ async function setPandalStatus(session,record,visited,year){
   if(!Array.isArray(data)||!data[0])throw new Error('The server did not confirm the saved visit status.');
   pandalStatuses.set(record.remoteId,{visited,updatedAt:data[0].updated_at});
 }
+function renderNearbyMap(){
+  if(!nearbyMap||!nearbyLayer)return;
+  nearbyLayer.clearLayers();
+  if(nearbyOrigin&&validPair(nearbyOrigin.lat,nearbyOrigin.lon)){
+    L.circleMarker([nearbyOrigin.lat,nearbyOrigin.lon],{radius:9,color:'#fff',weight:3,fillColor:'#388bff',fillOpacity:1})
+      .bindPopup('<b>Your current location</b>').addTo(nearbyLayer);
+  }
+  for(const r of nearbyMandaps){
+    const marker=L.marker([r.lat,r.lon]).bindPopup('<b>'+esc(r.pandalName||r.name||'Unnamed mandap')+'</b><br>'+(r.distance>=1000?(r.distance/1000).toFixed(1)+' km away':Math.round(r.distance)+' m away'));
+    marker.addTo(nearbyLayer);
+    marker.on('click',()=>{if(!selectedPandalIds.has(String(r.remoteId))){selectedPandalIds.add(String(r.remoteId));renderNearbyList();}});
+  }
+  const points=[...(nearbyOrigin&&validPair(nearbyOrigin.lat,nearbyOrigin.lon)?[[nearbyOrigin.lat,nearbyOrigin.lon]]:[]),...nearbyMandaps.map(r=>[r.lat,r.lon])];
+  if(points.length)nearbyMap.fitBounds(L.latLngBounds(points).pad(.18),{maxZoom:16});
+}
 function renderNearbyList(){
   const list=$('nearbyList');
   if(!list)return;
@@ -569,11 +594,13 @@ async function findNearbyMandaps(){
       .filter(r=>r.distance<=5000).sort((a,b)=>a.distance-b.distance).slice(0,30);
     if(position.coords.accuracy>100)setVisitStatus('GPS accuracy is about '+Math.round(position.coords.accuracy)+' m. Nearby search covers up to 5 km; move to a clearer area if results look wrong.');
     else setVisitStatus('Found '+nearbyMandaps.length+' public mandap(s) within 5 km. Select the places you visited or want to route through.');
+    nearbyOrigin=here;
+    renderNearbyMap();
     renderNearbyList();
   }catch(error){
     const messages={1:'Location permission was denied. Allow location access in Android settings to find nearby mandaps.',2:'Your current location could not be determined. Try again outdoors.',3:'GPS timed out. Please try again.'};
     setVisitStatus(messages[error.code]||error.message||'Could not read your current location. Try again.',true);
-    nearbyMandaps=[];renderNearbyList();
+    nearbyMandaps=[];nearbyOrigin=null;renderNearbyMap();renderNearbyList();
   }finally{
     $('findNearby').disabled=false;
   }
@@ -669,17 +696,23 @@ import('https://cdn.jsdelivr.net/npm/exifr@7.1.3/dist/full.esm.mjs').then(m=>exi
 
 function initMap(){
   if(!window.L)return;
-  map=L.map('map').setView([23.685,90.356],7);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; OpenStreetMap contributors'}).addTo(map);
+  const addTiles=target=>L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; OpenStreetMap contributors'}).addTo(target);
+  map=L.map('map').setView([23.685,90.356],7);addTiles(map);
   layer=L.layerGroup().addTo(map);
-  routeLayer=L.layerGroup().addTo(map);
+  nearbyMap=L.map('nearbyMap').setView([23.685,90.356],7);addTiles(nearbyMap);
+  nearbyLayer=L.layerGroup().addTo(nearbyMap);
+  routeMap=L.map('routeMap').setView([23.685,90.356],7);addTiles(routeMap);
+  routeLayer=L.layerGroup().addTo(routeMap);
   map.on('click',e=>{
     const r=records[+$('mPhoto').value];
     if(!r)return;
     $('mCoord').value=e.latlng.lat.toFixed(6)+', '+e.latlng.lng.toFixed(6);
     $('mStatus').textContent='Coordinates filled from map for '+(r.pandalName||r.name)+'. Tap “Save this location” to publish it.';
+    const google=$('googleMapPlace');
+    if(google)google.href='https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(e.latlng.lat+','+e.latlng.lng);
   });
 }
+
 
 /* ---------- Built-in EXIF parser ----------
    Instead of walking JPEG segments (which breaks on Pixel/MPF/HEIC files),
@@ -856,6 +889,32 @@ function selectRecord(index){
   $('mCoord').value=validPair(r.lat,r.lon)?r.lat.toFixed(6)+', '+r.lon.toFixed(6):'';
   $('mPandalName').value=r.pandalName||'';
   $('mStatus').textContent='Reviewing '+(r.pandalName||r.name)+(r.confirmed?' · confirmed':' · needs review')+'.';
+  const google=$('googleMapPlace');
+  if(google)google.href=validPair(r.lat,r.lon)?'https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(r.lat+','+r.lon):'https://maps.google.com/';
+  if(validPair(r.lat,r.lon)&&!String(r.pandalName||'').trim())suggestPlaceName(r,index);
+}
+async function suggestPlaceName(record,index){
+  if(!validPair(record.lat,record.lon)||String(record.pandalName||'').trim())return;
+  const token=++placeLookupToken;
+  $('mStatus').textContent='Trying to identify this location from map data…';
+  try{
+    const url='https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat='+encodeURIComponent(record.lat)+'&lon='+encodeURIComponent(record.lon)+'&zoom=18&addressdetails=1';
+    const response=await fetch(url,{headers:{Accept:'application/json'}});
+    if(!response.ok)throw new Error('Map lookup unavailable');
+    const data=await response.json();
+    if(token!==placeLookupToken||selectedRecordIndex!==index||String($('mPandalName').value||'').trim())return;
+    const address=data.address||{};
+    const suggestion=String(data.name||address.amenity||address.building||address.place||address.tourism||address.historic||address.man_made||address.leisure||address.shop||address.village||address.suburb||address.neighbourhood||'').trim();
+    if(suggestion){
+      $('mPandalName').value=suggestion;
+      record.mapNameSuggestion=suggestion;
+      $('mStatus').textContent='Map suggestion: “'+suggestion+'”. Please verify it is the correct pandal before saving.';
+    }else{
+      $('mStatus').textContent='No place name was available for these coordinates. You can enter a name or open Google Maps to check.';
+    }
+  }catch{
+    if(token===placeLookupToken&&selectedRecordIndex===index)$('mStatus').textContent='Automatic place-name lookup was unavailable. You can enter a name or open Google Maps to check.';
+  }
 }
 function render(){
   const gps=records.filter(r=>validPair(r.lat,r.lon));
@@ -1079,7 +1138,7 @@ async function optimizeStops(){
   $('routeSummary').textContent=optimizedRoute.length-1+' selected mandap(s) · approx. '+total.toFixed(1)+' km straight-line distance. The map shows every selected stop; Google Maps road distance may differ.';
   $('openRoute').disabled=optimizedRoute.length<2||optimizedRoute.length>11;
   if(optimizedRoute.length>11)$('routeSummary').textContent+=' Google Maps supports only a limited number of stops per route, so open this route in sections.';
-  map.fitBounds(L.latLngBounds(points).pad(.2),{maxZoom:16});
+  routeMap.fitBounds(L.latLngBounds(points).pad(.2),{maxZoom:16});
   $('planRoute').disabled=false;
 }
 $('planRoute').addEventListener('click',optimizeStops);
@@ -1092,7 +1151,7 @@ $('openRoute').addEventListener('click',()=>{
   window.open(url,'_blank','noopener');
 });
 
-initMap();render();loadPublicLocations();initAccount();
+initMap();render();loadPublicLocations();initAccount();showPage('page-map');
 </script>
 </body>
 </html>
