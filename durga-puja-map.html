@@ -136,23 +136,64 @@ async function loadPublicLocations(){
   }catch(e){console.warn('Could not load public Puja locations',e);setStatus('Could not load shared locations. Saved device locations remain available.',true)}
 }
 async function publishLocation(r){
-  if(!r||!validPair(r.lat,r.lon)||!(r.pandalName||'').trim())return false;
+  if(!r||!validPair(r.lat,r.lon)||!(r.pandalName||'').trim()){
+    $('mStatus').textContent='Cannot save: a pandal name and valid GPS coordinates are required.';
+    return false;
+  }
   const body={name:r.pandalName.trim(),latitude:r.lat,longitude:r.lon,description:''};
   const endpoint=SUPABASE_URL+'/rest/v1/puja_locations?select=id,name,latitude,longitude,description';
+  const matchesThisLocation=rows=>Array.isArray(rows)&&rows.find(p=>
+    String(p.name||'').trim().toLowerCase()===body.name.toLowerCase()&&
+    Math.abs(Number(p.latitude)-body.latitude)<0.0003&&
+    Math.abs(Number(p.longitude)-body.longitude)<0.0003&&!!p.id
+  );
   try{
-    const check=await fetch(endpoint+'&name=eq.'+encodeURIComponent(body.name),{headers:SUPABASE_HEADERS});
-    if(check.ok){
-      const rows=await check.json();
-      const match=rows.find(p=>Math.abs(Number(p.latitude)-r.lat)<0.0003&&Math.abs(Number(p.longitude)-r.lon)<0.0003);
-      if(match){r.remoteId=match.id;r.isPublic=true;return true}
+    // First check whether this exact named location already exists in the cloud.
+    const check=await fetch(endpoint+'&name=eq.'+encodeURIComponent(body.name),{headers:SUPABASE_HEADERS,cache:'no-store'});
+    if(!check.ok){
+      const detail=await check.text().catch(()=> '');
+      throw new Error('Could not verify cloud database ('+check.status+'): '+detail.slice(0,240));
     }
-    const res=await fetch(endpoint,{method:'POST',headers:{...SUPABASE_HEADERS,'Prefer':'return=representation'},body:JSON.stringify(body)});
-    const payload=await res.json().catch(()=>[]);
-    if(!res.ok)throw new Error(payload?.message||'Could not publish location ('+res.status+')');
-    const row=Array.isArray(payload)?payload[0]:null;
-    if(row){r.remoteId=row.id;r.isPublic=true}
-    return true;
-  }catch(e){console.warn('Could not publish location',e);$('mStatus').textContent='Not shared yet: '+(e.message||'network error');return false}
+    const existing=matchesThisLocation(await check.json());
+    if(existing){
+      r.remoteId=existing.id;r.isPublic=true;
+      return true;
+    }
+
+    // Ask PostgREST to return the inserted row. Never treat an empty response as success.
+    const res=await fetch(endpoint,{
+      method:'POST',
+      headers:{...SUPABASE_HEADERS,'Prefer':'return=representation'},
+      body:JSON.stringify(body),
+      cache:'no-store'
+    });
+    const responseText=await res.text().catch(()=> '');
+    let payload;
+    try{payload=responseText?JSON.parse(responseText):null}catch{payload=null}
+    if(!res.ok){
+      const detail=payload?.message||payload?.details||payload?.hint||responseText||'No error details returned';
+      throw new Error('Supabase rejected the save ('+res.status+'): '+String(detail).slice(0,300));
+    }
+    const inserted=Array.isArray(payload)?payload[0]:(payload&&typeof payload==='object'?payload:null);
+    if(inserted?.id&&matchesThisLocation([inserted])){
+      r.remoteId=inserted.id;r.isPublic=true;
+      return true;
+    }
+
+    // Some gateways return no inserted representation. Verify by reading the database again.
+    const verify=await fetch(endpoint+'&name=eq.'+encodeURIComponent(body.name),{
+      headers:SUPABASE_HEADERS,cache:'no-store'
+    });
+    if(verify.ok){
+      const saved=matchesThisLocation(await verify.json());
+      if(saved){r.remoteId=saved.id;r.isPublic=true;return true}
+    }
+    throw new Error('The server did not confirm a matching row in Supabase. The location has NOT been marked as saved.');
+  }catch(e){
+    console.error('Cloud location save/verification failed:',e);
+    $('mStatus').textContent='CLOUD SAVE FAILED: '+(e.message||'network error')+'. This location is not confirmed as shared.';
+    return false;
+  }
 }
 const setStatus=(m,e=false)=>{$('status').textContent=m;$('status').classList.toggle('error',e)};
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
