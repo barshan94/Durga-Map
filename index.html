@@ -355,14 +355,25 @@ async function saveVisit(r,method='manual'){
     setVisitStatus('Visit was not confirmed as saved: '+e.message,true);
   }finally{button.disabled=false;savingVisit=false}
 }
-function findNearbyMandaps(){
-  if(!navigator.geolocation){
-    setVisitStatus('This device does not provide GPS location in this app.',true);return;
+async function getCurrentVisitPosition(){
+  const C=window.Capacitor;
+  if(C&&C.isNativePlatform&&C.isNativePlatform()&&C.registerPlugin){
+    const Geo=C.registerPlugin('Geolocation');
+    return await Geo.getCurrentPosition({enableHighAccuracy:true,maximumAge:10000,timeout:20000});
   }
+  if(!navigator.geolocation)throw new Error('This device does not provide GPS location in this app.');
+  return await new Promise((resolve,reject)=>navigator.geolocation.getCurrentPosition(resolve,reject,{
+    enableHighAccuracy:true,maximumAge:10000,timeout:20000
+  }));
+}
+async function findNearbyMandaps(){
+  if(savingVisit)return;
   $('findNearby').disabled=true;
   $('nearbyList').innerHTML='<p class="muted">Checking your current location…</p>';
-  navigator.geolocation.getCurrentPosition(position=>{
+  try{
+    const position=await getCurrentVisitPosition();
     const here={lat:position.coords.latitude,lon:position.coords.longitude};
+    if(!validPair(here.lat,here.lon))throw new Error('The device returned invalid GPS coordinates.');
     const unique=new Map();
     records.filter(r=>r.isPublic&&r.remoteId&&validPair(r.lat,r.lon)).forEach(r=>{
       if(!unique.has(r.remoteId))unique.set(r.remoteId,r);
@@ -376,13 +387,13 @@ function findNearbyMandaps(){
       const record=records.find(r=>r.remoteId===button.dataset.visitId&&r.isPublic);
       if(record)saveVisit(record,'gps');
     }));
-    $('findNearby').disabled=false;
-  },error=>{
+  }catch(error){
     const messages={1:'Location permission was denied. Allow location access in Android settings to find nearby mandaps.',2:'Your current location could not be determined. Try again outdoors.',3:'GPS timed out. Please try again.'};
-    setVisitStatus(messages[error.code]||'Could not read your current location. Try again.',true);
+    setVisitStatus(messages[error.code]||error.message||'Could not read your current location. Try again.',true);
     $('nearbyList').innerHTML='';
-    $('findNearby').disabled=false;
-  },{enableHighAccuracy:true,maximumAge:10000,timeout:20000});
+  }finally{
+    if(!savingVisit)$('findNearby').disabled=false;
+  }
 }
 
 async function loadPublicLocations(){
