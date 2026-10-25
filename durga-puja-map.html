@@ -54,7 +54,7 @@ th,td{text-align:left;padding:9px 11px;border-bottom:1px solid var(--line);font-
 <input id="mPandalName" type="text" maxlength="160" style="margin-top:4px" placeholder="e.g. Ramna Kali Mandir Puja">
 <label class="muted" for="mCoord" style="display:block;margin-top:10px">GPS coordinates</label>
 <input id="mCoord" type="text" style="margin-top:4px" placeholder="23.615944, 90.503167 or 23°36'57.4&quot;N 90°30'11.4&quot;E">
-<div class="row"><button id="mApply" class="primary" disabled>Save location and name</button><button id="mConfirm" disabled>Confirm this location</button><button id="mClear" disabled>Remove GPS</button><button id="mConfirmAll" disabled>Confirm all GPS locations</button></div>
+<div class="row"><button id="mApply" class="primary" disabled>Save location and name</button><button id="mConfirm" disabled>Confirm this location</button><button id="mClear" disabled>Remove GPS</button><button id="mSaveAll" disabled>Save all GPS locations</button></div>
 <div id="mStatus" class="muted" style="margin-top:6px"></div>
 <div id="reviewList" class="review-list" aria-live="polite"></div>
 </section>
@@ -430,7 +430,7 @@ function render(){
   if(records.length){selectedRecordIndex=Math.max(0,Math.min(selectedRecordIndex,records.length-1));sel.value=String(selectedRecordIndex);}
   $('mApply').disabled=$('mClear').disabled=$('mConfirm').disabled=!records.length;
   const gpsCount=records.filter(r=>validPair(r.lat,r.lon)).length;
-  $('mConfirmAll').disabled=!gpsCount;
+  $('mSaveAll').disabled=!gpsCount;
   $('reviewList').innerHTML=records.length?records.map((r,i)=>{
     const hasGps=validPair(r.lat,r.lon);
     const label=(r.pandalName||'').trim()||r.name;
@@ -480,12 +480,41 @@ $('mConfirm').onclick=async()=>{
   if(await publishLocation(r)){persistRecords();await loadPublicLocations();$('mStatus').textContent='Saved permanently and shared with all users: '+(r.pandalName||r.name||'Unnamed location')}
   else $('mStatus').textContent='CLOUD SAVE FAILED. This location is only a temporary device draft and is not shared. Please retry; do not rely on it being saved.'
 };
-$('mConfirmAll').onclick=()=>{
+$('mSaveAll').onclick=async()=>{
   const gps=records.filter(r=>validPair(r.lat,r.lon)&&!r.isPublic);
-  if(!gps.length){$('mStatus').textContent='No unpublished GPS locations are ready.';return}
-  gps.forEach(r=>{r.confirmed=true});
-  render();persistRecords();
-  $('mStatus').textContent='Confirmed '+gps.length+' GPS locations locally. A pandal name is optional; save each location to publish it.';
+  if(!gps.length){$('mStatus').textContent='No unpublished GPS locations with valid coordinates are ready.';return}
+  const button=$('mSaveAll');
+  button.disabled=true;
+  $('mStatus').textContent='Saving '+gps.length+' GPS location(s) to the shared database…';
+  let succeeded=0;
+  const failed=[];
+  try{
+    for(let i=0;i<gps.length;i++){
+      const r=gps[i];
+      r.pandalName=(r.pandalName||'').trim();
+      r.name=r.pandalName||r.name||('Unnamed location '+Number(r.lat).toFixed(5)+', '+Number(r.lon).toFixed(5));
+      r.confirmed=true;
+      $('mStatus').textContent='Saving location '+(i+1)+' of '+gps.length+'…';
+      if(await publishLocation(r)){
+        succeeded++;
+        persistRecords();
+      }else{
+        failed.push(r.pandalName||r.name||('Location '+(i+1)));
+      }
+    }
+    persistRecords();
+    await loadPublicLocations();
+    if(failed.length){
+      $('mStatus').textContent='Bulk save finished: '+succeeded+' of '+gps.length+' locations saved and verified in the shared database; '+failed.length+' failed. Failed: '+failed.slice(0,3).join(', ')+(failed.length>3?'…':'')+'. Retry the failed locations individually or tap Save all again.';
+    }else{
+      $('mStatus').textContent='Success! All '+succeeded+' location(s) were saved permanently and verified in the shared database. Pandal names were optional.';
+    }
+  }catch(e){
+    console.error('Save all locations failed:',e);
+    $('mStatus').textContent='Bulk save interrupted after '+succeeded+' verified save(s). Please tap Save all again to retry the remaining locations.';
+  }finally{
+    render();
+  }
 };
 $('mClear').onclick=()=>{const r=records[selectedRecordIndex];if(!r)return;r.lat=r.lon=NaN;r.confirmed=false;optimizedRoute=[];render();persistRecords();};
 
