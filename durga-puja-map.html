@@ -631,6 +631,9 @@ async function loadPublicLocations(){
     const res=await fetch(SUPABASE_URL+'/rest/v1/puja_locations?select=id,name,latitude,longitude,description&order=name.asc',{headers:SUPABASE_HEADERS});
     if(!res.ok)throw new Error('Public locations request failed ('+res.status+')');
     const rows=await res.json();
+    // The cloud is the source of truth for shared locations. Remove cached shared
+    // records first so deleted cloud locations do not reappear from localStorage.
+    records=records.filter(r=>!r.isPublic);
     for(const p of rows){
       const lat=Number(p.latitude),lon=Number(p.longitude),name=String(p.name||'').trim();
       if(!name||!validPair(lat,lon))continue;
