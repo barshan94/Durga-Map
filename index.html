@@ -48,13 +48,13 @@ th,td{text-align:left;padding:9px 11px;border-bottom:1px solid var(--line);font-
 
 <section class="panel">
 <h2>2 · Review locations</h2>
-<p class="muted">Select a record, name the pandal, and adjust coordinates if needed. Named locations are shared publicly when saved.</p>
+<p class="muted">Select a record and adjust coordinates if needed. Pandal names are optional. Use Save this location or Save all GPS locations to publish to the shared map.</p>
 <select id="mPhoto" disabled><option>Import photos first</option></select>
 <label class="muted" for="mPandalName">Pandal name (optional)</label>
 <input id="mPandalName" type="text" maxlength="160" style="margin-top:4px" placeholder="e.g. Ramna Kali Mandir Puja">
 <label class="muted" for="mCoord" style="display:block;margin-top:10px">GPS coordinates</label>
 <input id="mCoord" type="text" style="margin-top:4px" placeholder="23.615944, 90.503167 or 23°36'57.4&quot;N 90°30'11.4&quot;E">
-<div class="row"><button id="mApply" class="primary" disabled>Save location and name</button><button id="mConfirm" disabled>Confirm this location</button><button id="mClear" disabled>Remove GPS</button><button id="mSaveAll" disabled>Save all GPS locations</button></div>
+<div class="row"><button id="mApply" class="primary" disabled>Save this location</button><button id="mConfirm" disabled>Confirm this location</button><button id="mClear" disabled>Remove GPS</button><button id="mSaveAll" disabled>Save all GPS locations</button></div>
 <div id="mStatus" class="muted" style="margin-top:6px"></div>
 <div id="reviewList" class="review-list" aria-live="polite"></div>
 </section>
@@ -214,7 +214,7 @@ function initMap(){
     const r=records[+$('mPhoto').value];
     if(!r)return;
     $('mCoord').value=e.latlng.lat.toFixed(6)+', '+e.latlng.lng.toFixed(6);
-    $('mStatus').textContent='Coordinates filled from map for '+(r.pandalName||r.name)+'. Tap “Save location and name” to apply.';
+    $('mStatus').textContent='Coordinates filled from map for '+(r.pandalName||r.name)+'. Tap “Save this location” to publish it.';
   });
 }
 
