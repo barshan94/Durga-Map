@@ -80,7 +80,10 @@ th,td{text-align:left;padding:9px 11px;border-bottom:1px solid var(--line);font-
   <div id="map" style="margin-top:12px"></div>
 </section>
 
-</section>
+<div class="row" style="justify-content:space-between;align-items:center"><h2 style="margin:12px 0 0">Location inventory</h2><input id="q" type="text" placeholder="Filter locations…" style="max-width:240px"></div>
+<div class="row"><button id="csv" disabled>Export locations CSV</button><button id="json" disabled>Export locations JSON</button><button id="clear" disabled>Clear local locations</button></div>
+<p class="muted">Shared mandap locations and GPS coordinates are retained. Photos are read temporarily and never uploaded.</p>
+<div class="tw"><table><thead><tr><th>Location name</th><th>GPS coordinates</th><th>Status</th></tr></thead><tbody id="rows"><tr><td colspan="3" class="muted" style="text-align:center;padding:20px">No locations yet.</td></tr></tbody></table></div>
 </section>
 
 <section id="page-account" class="page-view">
@@ -101,7 +104,6 @@ th,td{text-align:left;padding:9px 11px;border-bottom:1px solid var(--line);font-
   <div id="accountStatus" class="muted auth-status" aria-live="polite">Not signed in. You can still browse the public map.</div>
 </section>
 
-</section>
 </section>
 
 <section id="page-journey" class="page-view">
@@ -135,7 +137,6 @@ th,td{text-align:left;padding:9px 11px;border-bottom:1px solid var(--line);font-
 </section>
 
 </section>
-</section>
 
 <section id="page-route" class="page-view">
 <section class="panel" style="margin-top:0" aria-labelledby="routeHeading">
@@ -160,10 +161,7 @@ th,td{text-align:left;padding:9px 11px;border-bottom:1px solid var(--line);font-
   <ol id="routeStops" style="padding-left:24px"></ol>
 </section>
 
-<div class="row" style="justify-content:space-between;align-items:center"><h2 style="margin:12px 0 0">Location inventory</h2><input id="q" type="text" placeholder="Filter locations…" style="max-width:240px"></div>
-<div class="row"><button id="csv" disabled>Export locations CSV</button><button id="json" disabled>Export locations JSON</button><button id="clear" disabled>Clear local locations</button></div>
-<p class="muted">Shared mandap locations and GPS coordinates are retained. Photos are read temporarily and never uploaded.</p>
-<div class="tw"><table><thead><tr><th>Location name</th><th>GPS coordinates</th><th>Status</th></tr></thead><tbody id="rows"><tr><td colspan="3" class="muted" style="text-align:center;padding:20px">No locations yet.</td></tr></tbody></table></div>
+
 </section>
 
 </div>
