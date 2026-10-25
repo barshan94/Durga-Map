@@ -113,7 +113,7 @@ function persistRecords(){
     return true;
   }catch(e){console.warn('Could not persist location records',e);return false}
 }
-const SUPABASE_HEADERS={'apikey':SUPABASE_PUBLISHABLE_KEY,'Authorization':'Bearer '+SUPABASE_PUBLISHABLE_KEY,'Content-Type':'application/json'};
+// A publishable key belongs in apikey. Do not send it as a Bearer JWT; that can make REST writes fail.\nconst SUPABASE_HEADERS={'apikey':SUPABASE_PUBLISHABLE_KEY,'Content-Type':'application/json'};
 async function loadPublicLocations(){
   try{
     const res=await fetch(SUPABASE_URL+'/rest/v1/puja_locations?select=id,name,latitude,longitude,description&order=name.asc',{headers:SUPABASE_HEADERS});
