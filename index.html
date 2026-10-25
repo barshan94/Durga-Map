@@ -481,11 +481,11 @@ $('mConfirm').onclick=async()=>{
   else $('mStatus').textContent='CLOUD SAVE FAILED. This location is only a temporary device draft and is not shared. Please retry; do not rely on it being saved.'
 };
 $('mConfirmAll').onclick=()=>{
-  const gps=records.filter(r=>validPair(r.lat,r.lon)&&r.pandalName&&!r.isPublic);
-  if(!gps.length){$('mStatus').textContent='Name each location before publishing. No named local locations are ready.';return}
+  const gps=records.filter(r=>validPair(r.lat,r.lon)&&!r.isPublic);
+  if(!gps.length){$('mStatus').textContent='No unpublished GPS locations are ready.';return}
   gps.forEach(r=>{r.confirmed=true});
   render();persistRecords();
-  $('mStatus').textContent='Confirmed '+gps.length+' named locations locally. Publish each from Review.';
+  $('mStatus').textContent='Confirmed '+gps.length+' GPS locations locally. A pandal name is optional; save each location to publish it.';
 };
 $('mClear').onclick=()=>{const r=records[selectedRecordIndex];if(!r)return;r.lat=r.lon=NaN;r.confirmed=false;optimizedRoute=[];render();persistRecords();};
 
