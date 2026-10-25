@@ -59,7 +59,7 @@ jobs:
               e.preventDefault();
               pickOriginalPhotos().then(window.__handle).catch(function(err){alert('File selection failed: '+(err.message||err))});
             });
-            var folderButton=document.querySelector('label[for="folder"]');
+            var folderButton=document.querySelector('label[for="folderFiles"]');
             folderButton.addEventListener('click',function(e){
               if(!C||!C.isNativePlatform||!C.isNativePlatform())return;
               e.preventDefault();
