@@ -260,6 +260,34 @@ jobs:
           }
           EOF
       - run: npx cap sync android
+      - name: Enforce and verify launcher icon wiring
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("android/app/src/main/AndroidManifest.xml")
+          s = p.read_text()
+          import re
+          s, n1 = re.subn(r'android:icon="[^"]+"', 'android:icon="@mipmap/ic_launcher"', s, count=1)
+          s, n2 = re.subn(r'android:roundIcon="[^"]+"', 'android:roundIcon="@mipmap/ic_launcher_round"', s, count=1)
+          if n1 == 0:
+              s, n1 = re.subn(r'<application\\b', '<application android:icon="@mipmap/ic_launcher"', s, count=1)
+          if n2 == 0:
+              s = s.replace('android:icon="@mipmap/ic_launcher"', 'android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher_round"', 1)
+          p.write_text(s)
+          required = [
+              Path("android/app/src/main/res/mipmap-mdpi/ic_launcher.png"),
+              Path("android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png"),
+              Path("android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml"),
+              Path("android/app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml"),
+              Path("android/app/src/main/res/drawable-nodpi/ic_launcher_foreground.png"),
+          ]
+          missing = [str(x) for x in required if not x.is_file() or x.stat().st_size == 0]
+          if missing:
+              raise SystemExit("Launcher icon resources missing: " + ", ".join(missing))
+          print("Verified custom launcher PNGs and adaptive icon resources.")
+          print("Manifest launcher references enforced: @mipmap/ic_launcher and @mipmap/ic_launcher_round")
+          print(s[s.find("<application"):s.find("<application")+400])
+          PY
       - run: cd android && ./gradlew assembleDebug
       - uses: actions/upload-artifact@v4
         with:
