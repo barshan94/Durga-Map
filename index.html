@@ -23,6 +23,7 @@ th,td{text-align:left;padding:9px 11px;border-bottom:1px solid var(--line);font-
 .tag{background:#293a2d;color:var(--lime);padding:2px 7px;border-radius:6px;font-size:11px}.none{color:var(--err)}
 .warn{background:#2c2a18;border:1px solid #6b6430;border-radius:12px;padding:12px;margin:12px 0;font-size:13px}
 .review-list{display:grid;gap:7px;margin-top:12px;max-height:260px;overflow:auto}.review-item{display:flex;gap:10px;align-items:center;justify-content:space-between;background:var(--p2);border:1px solid var(--line);border-radius:10px;padding:9px}.review-item .review-info{min-width:0;overflow-wrap:anywhere}.review-item .review-meta{font-size:12px;color:var(--muted)}.review-item button{padding:6px 10px;flex-shrink:0}.review-state{font-size:11px;color:var(--lime)}
+.auth-fields{display:grid;gap:6px;margin-top:12px}.auth-fields label{font-size:13px;color:var(--muted)}input[type=email],input[type=password]{width:100%;background:var(--bg);color:var(--text);border:1px solid var(--line);border-radius:9px;padding:10px;font:inherit}.journey-stat b{font-size:25px}.nearby-item{display:flex;gap:10px;align-items:center;justify-content:space-between;background:var(--p2);border:1px solid var(--line);border-radius:10px;padding:10px}.nearby-item .nearby-info{min-width:0;overflow-wrap:anywhere}.nearby-item .nearby-meta{font-size:12px;color:var(--muted)}.nearby-item button{flex-shrink:0;padding:7px 10px}.history-item{display:flex;gap:10px;align-items:flex-start;justify-content:space-between;padding:10px 2px;border-bottom:1px solid var(--line)}.history-item:last-child{border-bottom:0}.history-item .history-meta{font-size:12px;color:var(--muted)}.auth-status,.visit-status{white-space:pre-wrap;margin-top:8px}
 
 .route-number{background:transparent;border:0}
 .route-number span{display:flex;align-items:center;justify-content:center;width:30px;height:30px;border:2px solid #101713;border-radius:50%;background:#ffb454;color:#172014;font-weight:800;box-shadow:0 2px 7px #0008}
@@ -67,8 +68,43 @@ th,td{text-align:left;padding:9px 11px;border-bottom:1px solid var(--line);font-
   <div id="map" style="margin-top:12px"></div>
 </section>
 
+<section class="panel" style="margin-top:14px" aria-labelledby="accountHeading">
+  <h2 id="accountHeading">4 · Your account</h2>
+  <p class="muted">Explore the shared mandap map without signing in. Create an account to keep your personal visit history across devices and years. Your visit history is private.</p>
+  <div id="authFields" class="auth-fields">
+    <label for="authEmail">Email address</label>
+    <input id="authEmail" type="email" autocomplete="email" maxlength="254" placeholder="you@example.com">
+    <label for="authPassword">Password</label>
+    <input id="authPassword" type="password" autocomplete="current-password" minlength="6" placeholder="At least 6 characters">
+  </div>
+  <div class="row">
+    <button id="signUp" class="primary" type="button">Create account</button>
+    <button id="signIn" type="button">Sign in</button>
+    <button id="signOut" type="button" style="display:none">Sign out</button>
+  </div>
+  <div id="accountStatus" class="muted auth-status" aria-live="polite">Not signed in. You can still browse the public map.</div>
+</section>
+
+<section class="panel" style="margin-top:14px" aria-labelledby="journeyHeading">
+  <h2 id="journeyHeading">5 · My Puja journey</h2>
+  <p class="muted">Find nearby mapped mandaps, then confirm your visit. Only your confirmed visit events are saved to your account; the app does not continuously track your movement.</p>
+  <div class="stats">
+    <div class="stat journey-stat"><b id="visitsThisYear">0</b><span class="muted">Unique this year</span></div>
+    <div class="stat journey-stat"><b id="visitsAllTime">0</b><span class="muted">All-time unique</span></div>
+    <div class="stat journey-stat"><b id="visitsRepeat">0</b><span class="muted">Repeat visits</span></div>
+  </div>
+  <div class="row">
+    <button id="findNearby" class="primary" type="button">Find nearby mandaps</button>
+    <button id="markSelectedVisited" type="button" disabled>Mark selected mandap visited</button>
+  </div>
+  <div id="visitStatus" class="muted visit-status" aria-live="polite">Sign in to sync your personal visit history.</div>
+  <div id="nearbyList" class="review-list" aria-live="polite"></div>
+  <h3 style="font-size:15px;margin:16px 0 4px">Visit history</h3>
+  <div id="visitHistory" class="muted">Sign in to view your saved visits across years.</div>
+</section>
+
 <section class="panel" style="margin-top:14px" aria-labelledby="routeHeading">
-  <h2 id="routeHeading">4 · Shortest visiting route</h2>
+  <h2 id="routeHeading">6 · Shortest visiting route</h2>
   <p class="muted">Builds an efficient stop order from your GPS locations. The order is optimized by geographic distance; your navigation app will calculate actual road directions and travel times.</p>
   <div class="row">
     <button id="planRoute" class="primary" type="button" disabled>Plan visiting route</button>
@@ -115,6 +151,236 @@ function persistRecords(){
 }
 // A publishable key belongs in apikey. Do not send it as a Bearer JWT; that can make REST writes fail.
 const SUPABASE_HEADERS={'apikey':SUPABASE_PUBLISHABLE_KEY,'Content-Type':'application/json'};
+
+// Account-based personal visit history. Only user-confirmed visit events are uploaded.
+const AUTH_STORAGE_KEY='durgaMap.auth.v1';
+let authSession=null,visitRecords=[];
+function setAccountStatus(message,isError=false){
+  $('accountStatus').textContent=message;
+  $('accountStatus').classList.toggle('none',isError);
+}
+function setVisitStatus(message,isError=false){
+  $('visitStatus').textContent=message;
+  $('visitStatus').classList.toggle('none',isError);
+}
+function saveAuthSession(data,previous=null){
+  const expiry=data.expires_at
+    ? (Number(data.expires_at)>1e12?Number(data.expires_at):Number(data.expires_at)*1000)
+    : Date.now()+Number(data.expires_in||3600)*1000;
+  authSession={
+    access_token:data.access_token,
+    refresh_token:data.refresh_token||previous?.refresh_token,
+    expires_at:expiry,
+    user:data.user||previous?.user||null
+  };
+  localStorage.setItem(AUTH_STORAGE_KEY,JSON.stringify(authSession));
+}
+function clearAuthSession(){
+  authSession=null;visitRecords=[];
+  try{localStorage.removeItem(AUTH_STORAGE_KEY)}catch{}
+  updateAccountUI();
+  renderVisitHistory();
+}
+async function authRequest(path,body,token=null){
+  const headers={...SUPABASE_HEADERS};
+  if(token)headers.Authorization='Bearer '+token;
+  const response=await fetch(SUPABASE_URL+path,{method:'POST',headers,body:JSON.stringify(body),cache:'no-store'});
+  const raw=await response.text();
+  let data={};try{data=raw?JSON.parse(raw):{}}catch{}
+  if(!response.ok)throw new Error(data.msg||data.message||data.error_description||data.error||raw||('Authentication failed ('+response.status+')'));
+  return data;
+}
+async function getValidSession(){
+  if(!authSession){
+    try{authSession=JSON.parse(localStorage.getItem(AUTH_STORAGE_KEY)||'null')}catch{authSession=null}
+  }
+  if(!authSession?.access_token)return null;
+  if(authSession.expires_at>Date.now()+60000)return authSession;
+  if(!authSession.refresh_token){clearAuthSession();return null}
+  try{
+    const refreshed=await authRequest('/auth/v1/token?grant_type=refresh_token',{refresh_token:authSession.refresh_token});
+    saveAuthSession(refreshed,authSession);
+    return authSession;
+  }catch(e){
+    if(/invalid refresh token|refresh token not found|session.*not found/i.test(e.message)){
+      clearAuthSession();return null;
+    }
+    throw e;
+  }
+}
+function updateAccountUI(){
+  const signedIn=!!authSession?.access_token&&!!authSession?.user;
+  $('authFields').style.display=signedIn?'none':'grid';
+  $('signUp').style.display=signedIn?'none':'inline-block';
+  $('signIn').style.display=signedIn?'none':'inline-block';
+  $('signOut').style.display=signedIn?'inline-block':'none';
+  if(signedIn)setAccountStatus('Signed in as '+(authSession.user.email||'your account')+'. Your personal visit history syncs with Supabase.');
+}
+async function loadVisitHistory(){
+  const session=await getValidSession();
+  if(!session){visitRecords=[];renderVisitHistory();return}
+  const all=[];
+  for(let start=0;;start+=1000){
+    const response=await fetch(SUPABASE_URL+'/rest/v1/personal_visits?select=id,pandal_id,pandal_name,latitude,longitude,visited_at,puja_year,method&order=visited_at.desc&limit=1000',{
+      headers:{...SUPABASE_HEADERS,Authorization:'Bearer '+session.access_token,Range:start+'-'+(start+999)},
+      cache:'no-store'
+    });
+    if(!response.ok){
+      const detail=await response.text().catch(()=> '');
+      throw new Error('Could not load your visit history ('+response.status+'): '+detail.slice(0,180));
+    }
+    const page=await response.json();
+    all.push(...page);
+    if(page.length<1000)break;
+  }
+  visitRecords=all;
+  renderVisitHistory();
+}
+function visitKey(v){return v.pandal_id||('coords:'+Number(v.latitude).toFixed(4)+','+Number(v.longitude).toFixed(4))}
+function renderVisitHistory(){
+  const year=new Date().getFullYear();
+  const thisYear=visitRecords.filter(v=>Number(v.puja_year)===year);
+  const uniqueThisYear=new Set(thisYear.map(visitKey));
+  const uniqueAll=new Set(visitRecords.map(visitKey));
+  $('visitsThisYear').textContent=uniqueThisYear.size;
+  $('visitsAllTime').textContent=uniqueAll.size;
+  $('visitsRepeat').textContent=Math.max(0,visitRecords.length-uniqueAll.size);
+  if(!authSession?.user){
+    $('visitHistory').textContent='Sign in to view your saved visits across years.';
+    $('nearbyList').innerHTML='';
+    return;
+  }
+  if(!visitRecords.length){
+    $('visitHistory').innerHTML='<p class="muted">No visits recorded yet. Find a nearby mandap and confirm your first visit.</p>';
+    return;
+  }
+  $('visitHistory').innerHTML=visitRecords.slice(0,100).map(v=>{
+    const date=new Date(v.visited_at);
+    const when=Number.isNaN(date.getTime())?'Date unavailable':date.toLocaleString(undefined,{year:'numeric',month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});
+    return '<div class="history-item"><div><strong>'+esc(v.pandal_name||'Unnamed mandap')+'</strong><div class="history-meta">'+esc(when)+' · Puja '+esc(v.puja_year)+' · '+(v.method==='gps'?'GPS suggestion confirmed':'Manually marked')+'</div></div></div>';
+  }).join('')+(visitRecords.length>100?'<p class="muted">Showing the latest 100 visits.</p>':'');
+}
+async function initAccount(){
+  try{
+    authSession=JSON.parse(localStorage.getItem(AUTH_STORAGE_KEY)||'null');
+    const session=await getValidSession();
+    if(session){
+      updateAccountUI();
+      await loadVisitHistory();
+      setVisitStatus('Your visit history is synced. Find nearby mandaps when you are ready.');
+    }else{
+      updateAccountUI();
+    }
+  }catch(e){
+    console.warn('Account restore failed:',e);
+    setAccountStatus('Could not restore your session. Check your internet connection or sign in again.',true);
+  }
+}
+async function signUp(){
+  const email=$('authEmail').value.trim(),password=$('authPassword').value;
+  if(!email||!password){setAccountStatus('Enter your email and password first.',true);return}
+  if(password.length<6){setAccountStatus('Use a password with at least 6 characters.',true);return}
+  $('signUp').disabled=true;
+  try{
+    const data=await authRequest('/auth/v1/signup',{email,password});
+    if(data.access_token&&data.refresh_token){
+      saveAuthSession(data);updateAccountUI();await loadVisitHistory();
+      setAccountStatus('Account created and signed in. Your Puja journey is ready.');
+      setVisitStatus('Your visit history is synced. Find nearby mandaps when you are ready.');
+    }else{
+      setAccountStatus('Account created. Check your email for the confirmation link, then return here and sign in.');
+    }
+  }catch(e){setAccountStatus('Could not create account: '+e.message,true)}
+  finally{$('signUp').disabled=false}
+}
+async function signIn(){
+  const email=$('authEmail').value.trim(),password=$('authPassword').value;
+  if(!email||!password){setAccountStatus('Enter your email and password first.',true);return}
+  $('signIn').disabled=true;
+  try{
+    const data=await authRequest('/auth/v1/token?grant_type=password',{email,password});
+    saveAuthSession(data);updateAccountUI();await loadVisitHistory();
+    setVisitStatus('Signed in. Your personal visit history is synced across devices.');
+  }catch(e){setAccountStatus('Could not sign in: '+e.message,true)}
+  finally{$('signIn').disabled=false}
+}
+async function signOut(){
+  try{
+    const session=await getValidSession();
+    if(session)await authRequest('/auth/v1/logout',{},session.access_token);
+  }catch(e){console.warn('Server sign-out did not complete:',e)}
+  clearAuthSession();
+  setAccountStatus('Signed out. Your cloud visit history remains saved to your account.');
+  setVisitStatus('Sign in to view or add to your personal visit history.');
+}
+async function saveVisit(r,method='manual'){
+  if(!r||!r.isPublic||!r.remoteId||!validPair(r.lat,r.lon)){
+    setVisitStatus('Choose a mandap from the shared map before recording a visit.',true);return;
+  }
+  let session;
+  try{session=await getValidSession()}catch(e){setVisitStatus('Could not refresh your session: '+e.message,true);return}
+  if(!session){
+    setVisitStatus('Please create an account or sign in before saving a visit. The shared map remains available without an account.',true);
+    $('authEmail').focus();return;
+  }
+  const year=new Date().getFullYear();
+  const already=visitRecords.some(v=>v.pandal_id===r.remoteId&&Number(v.puja_year)===year);
+  if(already&&!confirm('You already recorded this mandap this year. Record another visit?'))return;
+  const button=$('findNearby');button.disabled=true;
+  try{
+    const body={
+      user_id:session.user.id,
+      pandal_id:r.remoteId,
+      pandal_name:(r.pandalName||r.name||'Unnamed mandap').trim(),
+      latitude:r.lat,longitude:r.lon,
+      visited_at:new Date().toISOString(),
+      puja_year:year,
+      method:method==='gps'?'gps':'manual'
+    };
+    const response=await fetch(SUPABASE_URL+'/rest/v1/personal_visits?select=id,pandal_id,pandal_name,latitude,longitude,visited_at,puja_year,method',{
+      method:'POST',
+      headers:{...SUPABASE_HEADERS,Authorization:'Bearer '+session.access_token,Prefer:'return=representation'},
+      body:JSON.stringify(body),cache:'no-store'
+    });
+    const raw=await response.text();let data=[];try{data=raw?JSON.parse(raw):[]}catch{}
+    if(!response.ok)throw new Error(data.message||data.details||raw||('Save failed ('+response.status+')'));
+    if(!Array.isArray(data)||!data[0]?.id)throw new Error('The server did not confirm the saved visit.');
+    await loadVisitHistory();
+    setVisitStatus('Visit saved to your private history: '+body.pandal_name+'.');
+  }catch(e){
+    setVisitStatus('Visit was not confirmed as saved: '+e.message,true);
+  }finally{button.disabled=false}
+}
+function findNearbyMandaps(){
+  if(!navigator.geolocation){
+    setVisitStatus('This device does not provide GPS location in this app.',true);return;
+  }
+  $('findNearby').disabled=true;
+  $('nearbyList').innerHTML='<p class="muted">Checking your current location…</p>';
+  navigator.geolocation.getCurrentPosition(position=>{
+    const here={lat:position.coords.latitude,lon:position.coords.longitude};
+    const unique=new Map();
+    records.filter(r=>r.isPublic&&r.remoteId&&validPair(r.lat,r.lon)).forEach(r=>{
+      if(!unique.has(r.remoteId))unique.set(r.remoteId,r);
+    });
+    const nearby=[...unique.values()].map(r=>({...r,distance:distanceKm(here,r)*1000}))
+      .filter(r=>r.distance<=250).sort((a,b)=>a.distance-b.distance).slice(0,10);
+    if(position.coords.accuracy>100)setVisitStatus('GPS accuracy is about '+Math.round(position.coords.accuracy)+' m. Move to a clearer area if the nearby results look wrong.');
+    else setVisitStatus('GPS checked. Confirm a visit only when you are actually at the mandap.');
+    $('nearbyList').innerHTML=nearby.length?nearby.map(r=>'<div class="nearby-item"><div class="nearby-info"><strong>'+esc(r.pandalName||r.name||'Unnamed mandap')+'</strong><div class="nearby-meta">'+Math.round(r.distance)+' m away</div></div><button type="button" data-visit-id="'+esc(r.remoteId)+'">Confirm visit</button></div>').join(''):'<p class="muted">No shared mandap found within 250 m. Move closer to a mapped mandap and try again.</p>';
+    $('nearbyList').querySelectorAll('[data-visit-id]').forEach(button=>button.addEventListener('click',()=>{
+      const record=records.find(r=>r.remoteId===button.dataset.visitId&&r.isPublic);
+      if(record)saveVisit(record,'gps');
+    }));
+    $('findNearby').disabled=false;
+  },error=>{
+    const messages={1:'Location permission was denied. Allow location access in Android settings to find nearby mandaps.',2:'Your current location could not be determined. Try again outdoors.',3:'GPS timed out. Please try again.'};
+    setVisitStatus(messages[error.code]||'Could not read your current location. Try again.',true);
+    $('nearbyList').innerHTML='';
+    $('findNearby').disabled=false;
+  },{enableHighAccuracy:true,maximumAge:10000,timeout:20000});
+}
+
 async function loadPublicLocations(){
   try{
     const res=await fetch(SUPABASE_URL+'/rest/v1/puja_locations?select=id,name,latitude,longitude,description&order=name.asc',{headers:SUPABASE_HEADERS});
@@ -428,6 +694,8 @@ function render(){
   const sel=$('mPhoto');sel.disabled=!records.length;
   sel.innerHTML=records.length?records.map((r,i)=>`<option value="${i}">${esc(r.pandalName||r.name)}${r.isPublic?' · Public':(r.confirmed?' ✓':'')}</option>`).join(''):'<option>Import files first</option>';
   if(records.length){selectedRecordIndex=Math.max(0,Math.min(selectedRecordIndex,records.length-1));sel.value=String(selectedRecordIndex);}
+  const selected=records[selectedRecordIndex];
+  $('markSelectedVisited').disabled=!(selected&&selected.isPublic&&selected.remoteId);
   $('mApply').disabled=$('mClear').disabled=$('mConfirm').disabled=!records.length;
   const gpsCount=records.filter(r=>validPair(r.lat,r.lon)).length;
   $('mSaveAll').disabled=!gpsCount;
@@ -527,6 +795,11 @@ $('json').onclick=()=>download('puja-locations.json',JSON.stringify(clean(),null
 $('clear').onclick=()=>{records=records.filter(r=>r.isPublic);sidecars.clear();optimizedRoute=[];selectedRecordIndex=0;routeLayer?.clearLayers();render();persistRecords();setStatus('Cleared local location data. Shared public locations remain available.')};
 $('q').oninput=render;
 $('files').onchange=async e=>{await handle(e.target.files);optimizedRoute=[];e.target.value=''};
+$('signUp').addEventListener('click',signUp);
+$('signIn').addEventListener('click',signIn);
+$('signOut').addEventListener('click',signOut);
+$('findNearby').addEventListener('click',findNearbyMandaps);
+$('markSelectedVisited').addEventListener('click',()=>saveVisit(records[selectedRecordIndex],'manual'));
 $('mPhoto').addEventListener('change',()=>{
   const index=Number($('mPhoto').value);
   if(!Number.isInteger(index)||!records[index])return;
@@ -597,7 +870,7 @@ $('openRoute').addEventListener('click',()=>{
   window.open(url,'_blank','noopener');
 });
 
-initMap();render();loadPublicLocations();
+initMap();render();loadPublicLocations();initAccount();
 </script>
 </body>
 </html>
