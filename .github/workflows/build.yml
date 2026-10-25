@@ -290,6 +290,9 @@ jobs:
               Path("android/app/src/main/res/drawable-nodpi/durga_launcher_foreground.png"),
           ]
           missing = [str(x) for x in required if not x.is_file() or x.stat().st_size == 0]
+          default_vectors = list(Path("android/app/src/main/res").rglob("ic_launcher_foreground.xml"))
+          if default_vectors:
+              raise SystemExit("Default Android robot vector still exists: " + ", ".join(map(str, default_vectors)))
           if missing:
               raise SystemExit("Launcher icon resources missing: " + ", ".join(missing))
           print("Verified custom launcher PNGs and adaptive icon resources.")
