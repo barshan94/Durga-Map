@@ -4,7 +4,7 @@ Last updated: 25 October 2026
 
 ## 1. What this project is
 
-Durga Map is an Android-focused Durga Puja pandal/location explorer. Its main purpose is to help people identify and find Puja mandaps using GPS coordinates extracted from selected photos, and to build toward a shared map of public pandal locations.
+Durga Map is an Android-only Durga Puja pandal/location explorer. The standalone web version was removed because browser-based photo-location access did not work reliably for this use case. Its main purpose is to help people identify and find Puja mandaps using GPS coordinates extracted from selected photos, and to build toward a shared map of public pandal locations.
 
 Repository: https://github.com/barshan94/Durga-Map
 
@@ -16,7 +16,7 @@ Main technology: static HTML/CSS/JavaScript, Leaflet map UI, Capacitor Android w
 
 - **Photo GPS workflow:** select photos and inspect available metadata to find latitude/longitude. GPS extraction only works when the selected image actually contains readable GPS coordinates; a GPS-related metadata label by itself does not guarantee coordinates are present or readable.
 - **Map and location inventory:** view recognized locations on a map and in a list/table, including coordinates and status.
-- **Local device records:** draft/saved location records can be stored in browser/app local storage. These records are specific to the browser/app storage on that device.
+- **Local device records:** draft/saved location records can be stored in the Android app's Capacitor WebView storage. These records are specific to that app installation/device.
 - **Shared public locations:** the app requests public location rows from the configured Supabase project and displays locations returned by the backend.
 - **Account/session support:** account UI and session handling are present in the HTML application.
 - **Location contribution flow:** code includes saving location records to the shared backend, checking for duplicates, and verifying that a write was actually returned by the backend.
@@ -26,8 +26,8 @@ Main technology: static HTML/CSS/JavaScript, Leaflet map UI, Capacitor Android w
 
 ## 3. Repository map
 
-- `index.html` — root HTML entry file used by the build workflow; check the workflow before assuming any other HTML file is packaged.
-- `durga-puja-map.html` — application HTML source with the map, photo workflow, inventory, local storage, and backend integration.
+- `durga-puja-map.html` — maintained application HTML source with the map, photo workflow, inventory, local storage, and backend integration.
+- `index.html` — legacy/root HTML file; confirm the workflow's copy step before editing it as the app source.
 - `capacitor.config.json` — Capacitor app ID/name and configured web directory (`www`).
 - `package.json` — Capacitor dependencies and project package metadata.
 - `.github/workflows/build.yml` — Android build workflow.
@@ -35,7 +35,7 @@ Main technology: static HTML/CSS/JavaScript, Leaflet map UI, Capacitor Android w
 - `assets/durga-map-icon.svg`, `assets/durga-map-foreground.svg` — vector icon artwork.
 - `COMMUNITY_ROADMAP.md` — longer-term roadmap for community contributions, moderation, and privacy.
 
-Before changing application behavior, check whether the workflow copies `index.html`, `durga-puja-map.html`, or both into the Capacitor `www` directory. Keep the packaged entry file and the maintained source in sync when required.
+The current workflow copies `durga-puja-map.html` into `www/index.html` before packaging. Make app behavior changes in the maintained source file and verify the workflow still packages it.
 
 ## 4. How to use the app
 
@@ -58,10 +58,10 @@ Before changing application behavior, check whether the workflow copies `index.h
 4. If the app reports a cloud-save failure, treat the item as a local draft until the backend write is verified.
 
 ### Local versus shared data
-- **Local/device data** lives in the app/browser storage on one device.
+- **Local/device data** lives in the Android app's WebView storage on one device.
 - **Shared data** comes from the configured Supabase project and should be available across devices when access policies permit.
 - Clearing the cloud database does not automatically erase local storage on phones.
-- Clearing browser/app storage does not delete rows in Supabase.
+- Clearing the app's local storage does not delete rows in Supabase.
 - Reinstalling an app can sometimes leave or clear local data depending on the Android/WebView storage behavior; do not use reinstalling as the only data-cleanup strategy.
 
 ## 5. Important current data-cleanup note
@@ -137,7 +137,7 @@ For local development, the repository currently lists Capacitor Android/CLI/Core
 - Re-test GPS extraction using original photos known to contain GPS coordinates.
 - Verify Supabase Row Level Security and sign-in/sign-out behavior with both authenticated and signed-out sessions.
 - Complete the moderator-only review flow before treating community submissions as a fully moderated public service.
-- Test the Android and web experiences separately; success in one does not prove the other is working.
+- Test the packaged Android APK on a physical device; standalone web behavior is not supported.
 
 ## 10. Definition of a reliable release
 
