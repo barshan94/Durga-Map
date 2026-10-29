@@ -2,7 +2,7 @@ name: Build APK
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches: [main, 'experiment/apk-under-2mb']
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -298,6 +298,27 @@ jobs:
           print("Verified custom launcher PNGs and adaptive icon resources.")
           print("Manifest launcher references enforced: @mipmap/ic_launcher and @mipmap/ic_launcher_round")
           print(s[s.find("<application"):s.find("<application")+400])
+          PY
+      - name: Experimental APK size optimization (R8 and resource shrinking)
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          p = Path("android/app/build.gradle")
+          s = p.read_text()
+          # Apply minification to the experimental debug APK only. This keeps the same
+          # app ID, web UI, plugin registration, permissions, and user-facing features.
+          pattern = r'debug\\s*\\{'
+          replacement = "debug {\\n            minifyEnabled true\\n            shrinkResources true\\n            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'"
+          s2, n = re.subn(pattern, replacement, s, count=1)
+          if n != 1:
+              raise SystemExit('Could not safely locate debug buildType in android/app/build.gradle; refusing to change build configuration')
+          p.write_text(s2)
+          rules = Path('android/app/proguard-rules.pro')
+          existing = rules.read_text() if rules.exists() else ''
+          keep = '''\n# Experimental safety keeps: Capacitor discovers native plugins by class/annotation.\n-keep class com.barshan.durgamap.PhotoPickerPlugin { *; }\n-keep class com.barshan.durgamap.MainActivity { *; }\n-keep class com.getcapacitor.** { *; }\n-keepclassmembers class * { @com.getcapacitor.annotation.PluginMethod <methods>; }\n'''
+          rules.write_text(existing + keep)
+          print('Enabled R8 minification and Android resource shrinking for experimental debug APK only.')
           PY
       - run: cd android && ./gradlew assembleDebug
       - uses: actions/upload-artifact@v4
