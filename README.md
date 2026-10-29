@@ -1,8 +1,8 @@
 # Durga Map
 
-**Durga Map** is an Android-focused Durga Puja pandal and location explorer. It helps users inspect GPS coordinates available in selected photos, organize location records, view places on an interactive map, and open mapped locations for navigation. The project is also evolving toward a community-contributed map of public Durga Puja pandals.
+**Durga Map is an Android-only application** for exploring Durga Puja pandal locations. It is designed to read GPS metadata from selected photos on an Android device, organize location records, display locations on a map, and hand off navigation to Google Maps or another installed map app. The longer-term direction is a community-contributed map of public Durga Puja pandals.
 
-> **Project status:** In progress. This repository contains the app source and Android build workflow. The portfolio demo is a browser-based walkthrough, not the installed Android application.
+> **Project status:** In progress. The supported product is the Android app distributed as an APK. The former standalone web version was removed because browser-based photo-location access did not work reliably for this use case. This repository's HTML files are the app's internal frontend assets packaged inside the Android APK; they are not a supported standalone web application.
 
 ## Project links
 
@@ -10,10 +10,9 @@
 - **Project guide:** [PROJECT_GUIDE.md](PROJECT_GUIDE.md)
 - **Community roadmap:** [COMMUNITY_ROADMAP.md](COMMUNITY_ROADMAP.md)
 - **Portfolio project page:** [Durga Map on the portfolio](https://portfolio-beta-eight-b4vx6dfs83.vercel.app/#projects)
-- **Browser demo:** [Open the Durga Map walkthrough](https://portfolio-beta-eight-b4vx6dfs83.vercel.app/durga-map.html)
 - **Android build workflow:** [GitHub Actions](https://github.com/barshan94/Durga-Map/actions)
 
-The browser demo is illustrative and does not prove that every feature is connected to live backend data. For Android photo selection and device-specific behavior, install and test a built APK.
+Use the generated APK on an Android device to test the app. Do not use the removed browser version as a way to test photo GPS extraction or Android-specific functionality.
 
 ## What it does
 
@@ -37,7 +36,7 @@ The browser demo is illustrative and does not prove that every feature is connec
 | Android wrapper | Capacitor 6 |
 | Android application ID | `com.barshan.durgamap` |
 | App name | `Durga Map` |
-| Web entry directory | `www` |
+| Capacitor web asset directory inside the APK | `www` |
 | Shared backend | Supabase (PostgreSQL, Auth, and Row Level Security) |
 | Automated Android build | GitHub Actions, Node.js 20, Java 17 |
 
@@ -121,11 +120,11 @@ For local Android builds, follow the steps in [`.github/workflows/build.yml`](.g
 
 ### Local data versus shared data
 
-- **Local records** are stored in the current browser/app storage on that device.
+- **Local records** are stored in the Android app's WebView storage on that device.
 - **Shared records** are returned by the configured Supabase backend and are subject to database policies.
 - Clearing local storage does not delete cloud records.
 - Deleting cloud records does not automatically clear local app storage.
-- The portfolio browser demo and the Android app may not have identical permissions or access to device files.
+- The HTML/JavaScript frontend runs inside the Android app's Capacitor WebView; native photo-picker behavior depends on the Android bridge and installed APK.
 
 ## Supabase and configuration
 
@@ -195,7 +194,7 @@ See [COMMUNITY_ROADMAP.md](COMMUNITY_ROADMAP.md) for milestones and the proposed
 - GPS extraction depends on the selected file containing readable coordinates.
 - Shared-map behavior depends on live Supabase configuration and access policies.
 - Community submissions need a properly tested moderator-only review workflow before the map can be treated as a fully moderated public directory.
-- Browser-demo behavior is not a substitute for Android device testing.
+- The former standalone web version has been removed; test the supported product on Android.
 - Local and cloud records are separate and can become inconsistent if not checked explicitly.
 
 ## Author
